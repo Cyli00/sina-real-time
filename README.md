@@ -94,3 +94,48 @@ RUST_LOG=warn  ./target/release/sina-realtime-collector   # 仅告警
 
 `storage.rs` 中的 `mpsc::Receiver<String>` 可替换为 `broadcast` channel，
 向下游实时分析模块（Python、数据库写入器等）同时分发数据，无需修改采集层。
+
+---
+
+## 策略回测平台
+
+基于采集数据 + 新浪 HTTP API 的 A 股策略回测系统，位于 `project/` 目录。
+
+- **后端**: Rust/Axum — 合并 CSV 实时数据 + HTTP 历史 K 线，提供 `/api/kline`、`/api/range` 接口
+- **前端**: React/Recharts — 10 种策略对比、资金曲线图、排名表
+- 详细文档见 [project/README.md](project/README.md)
+
+### Docker 部署
+
+```bash
+cd project
+
+# 仅回测平台（不采集实时数据，从新浪 HTTP API 获取历史 K 线）
+docker compose up -d backtest
+
+# 回测 + 实时采集
+docker compose --profile with-collector up -d
+
+# 查看日志
+docker compose logs -f
+```
+
+启动后访问 `http://localhost:4000`。
+
+### 手动部署
+
+```bash
+# 1. 构建前端
+cd project/client && npm install && npm run build
+
+# 2. 构建并启动后端（托管前端静态文件）
+cd ../server && cargo build --release
+./target/release/backtest-server \
+  --static-dir ../client/dist \
+  --csv-dir ../../data \
+  --port 4000
+```
+
+### 远程服务器部署
+
+包含 Nginx + HTTPS、systemd 服务配置、防火墙等完整指南，见 [project/README.md — 远程服务器部署](project/README.md#远程服务器部署)。
