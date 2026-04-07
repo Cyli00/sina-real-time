@@ -1,5 +1,42 @@
-/target
-/data
-project/server/target
-project/client/node_modules
-project/client/dist
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime data
+*.pid
+*.pid.lock
+*.seed
+
+# Cache directories/files
+.cache/
+.tmp/
+tmp/
+temp/
+*.cache
+
+# Node.js cache
+node_modules/
+.npm/
+.pnpm-store/
+
+# Build/tool cache
+.eslintcache
+.parcel-cache/
+.vite/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDE/editor cache
+.idea/
+.vscode/
+*.swp
+*.swo
+
