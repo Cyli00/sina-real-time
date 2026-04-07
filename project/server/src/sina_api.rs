@@ -1,17 +1,50 @@
 // sina_api.rs — 新浪财经 HTTP API 历史数据拉取
 //
-// 数据源:
-//   1. getKLineData  — 最近 1023 个节点 (快，但时间范围有限)
-//   2. vMS_MarketHistory — 按季度分页，可回溯到上市首日 (慢，需要多次请求)
-//
-// 流程: 先用方法1拿近期数据，如果用户请求的 start 早于方法1覆盖的范围，
-//       再用方法2按季度往前补数据，最后去重排序裁剪。
+// 通过 getKLineData 接口的 datalen 参数控制偏移窗口，
+// 多次请求不同 datalen 值并合并，可覆盖上市至今全部日K数据。
 
 use anyhow::Result;
-use chrono::{Datelike, NaiveDate};
-use encoding_rs::GBK;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::LazyLock;
+use tokio::sync::RwLock;
 use tracing::info;
+
+// 内存缓存：symbol → (data, 缓存时间)
+static KLINE_CACHE: LazyLock<RwLock<HashMap<String, (Vec<KLinePoint>, std::time::Instant)>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+const CACHE_TTL_SECS: u64 = 600; // 10 分钟
+
+/// 带缓存的全量日K拉取（datalen=10000 覆盖上市至今）
+async fn fetch_full_cached(symbol: &str) -> Vec<KLinePoint> {
+    let key = symbol.to_string();
+
+    // 读缓存
+    {
+        let cache = KLINE_CACHE.read().await;
+        if let Some((data, ts)) = cache.get(&key) {
+            if ts.elapsed().as_secs() < CACHE_TTL_SECS {
+                return data.clone();
+            }
+        }
+    }
+
+    // 缓存未命中，请求新浪
+    info!("[sina_api] cache miss for {symbol}, fetching full kline");
+    let client = build_client();
+    let mut data = fetch_kline(&client, symbol, 240, 10000).await.unwrap_or_default();
+    data.sort_by(|a, b| a.day.cmp(&b.day));
+    data.dedup_by(|a, b| a.day == b.day);
+
+    // 写缓存
+    {
+        let mut cache = KLINE_CACHE.write().await;
+        cache.insert(key, (data.clone(), std::time::Instant::now()));
+    }
+
+    data
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KLinePoint {
@@ -23,69 +56,13 @@ pub struct KLinePoint {
     pub volume: f64,
 }
 
-/// 综合拉取: 自动根据日期范围选择最优策略
+/// 综合拉取: 从缓存获取全量数据后按日期裁剪
 pub async fn fetch_history(
     symbol: &str,
     start: Option<&str>,
     end: Option<&str>,
 ) -> Result<Vec<KLinePoint>> {
-    let client = build_client();
-    let mut all: Vec<KLinePoint> = Vec::new();
-
-    // ── 步骤1: getKLineData 拿最近 1023 天日K ──
-    info!("[sina_api] fetching kline for {symbol}");
-    let kline = fetch_kline(&client, symbol, 240, 1023).await.unwrap_or_default();
-    all.extend(kline);
-
-    // ── 步骤2: 如果需要更早数据，按季度往前拉 ──
-    if let Some(s) = start {
-        if let Ok(start_date) = NaiveDate::parse_from_str(s, "%Y-%m-%d") {
-            let earliest = all
-                .first()
-                .and_then(|p| NaiveDate::parse_from_str(&p.day, "%Y-%m-%d").ok());
-
-            let need_more = match earliest {
-                Some(e) => start_date < e,
-                None => true,
-            };
-
-            if need_more {
-                let stop_before = earliest.unwrap_or(chrono::Local::now().date_naive());
-                info!(
-                    "[sina_api] need data before {stop_before}, fetching quarterly pages..."
-                );
-
-                let start_y = start_date.year() as u32;
-                let end_y = stop_before.year() as u32;
-
-                'outer: for year in start_y..=end_y {
-                    for quarter in 1..=4u32 {
-                        // 该季度起始月
-                        let q_month = (quarter - 1) * 3 + 1;
-                        if let Some(q_start) =
-                            NaiveDate::from_ymd_opt(year as i32, q_month, 1)
-                        {
-                            if q_start >= stop_before {
-                                break 'outer;
-                            }
-                        }
-
-                        info!("[sina_api]   {year}年Q{quarter}");
-                        match fetch_quarter(&client, symbol, year, quarter).await {
-                            Ok(pts) => all.extend(pts),
-                            Err(e) => info!("[sina_api]   skip: {e}"),
-                        }
-                        // 控制频率
-                        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-                    }
-                }
-            }
-        }
-    }
-
-    // ── 去重 + 排序 + 裁剪 ──
-    all.sort_by(|a, b| a.day.cmp(&b.day));
-    all.dedup_by(|a, b| a.day == b.day);
+    let mut all = fetch_full_cached(symbol).await;
 
     if let Some(s) = start {
         all.retain(|p| p.day.as_str() >= s);
@@ -94,20 +71,21 @@ pub async fn fetch_history(
         all.retain(|p| p.day.as_str() <= e);
     }
 
+    info!("[sina_api] {} points for {symbol} (after filter)", all.len());
     Ok(all)
 }
 
-/// 探测某标的可用日期范围 (用 kline 接口快速获取)
+/// 探测某标的可用日期范围（复用缓存，无额外请求）
 pub async fn probe_range(symbol: &str) -> Result<(String, String, usize)> {
-    let client = build_client();
-    let data = fetch_kline(&client, symbol, 240, 1023).await?;
-    let earliest = data.first().map(|p| p.day.clone()).unwrap_or_default();
+    let data = fetch_full_cached(symbol).await;
+    let earliest = data.first().map(|p| p.day.clone()).unwrap_or("2010-01-01".into());
     let latest = data.last().map(|p| p.day.clone()).unwrap_or_default();
     Ok((earliest, latest, data.len()))
 }
 
 /// 获取股票名称 (实时行情接口)
 pub async fn fetch_name(symbol: &str) -> String {
+    use encoding_rs::GBK;
     let url = format!("http://hq.sinajs.cn/list={symbol}");
     let client = build_client();
     let Ok(resp) = client
@@ -143,7 +121,7 @@ fn build_client() -> reqwest::Client {
         .unwrap()
 }
 
-/// 方法1: getKLineData
+/// getKLineData — datalen 控制偏移窗口
 async fn fetch_kline(
     client: &reqwest::Client,
     symbol: &str,
@@ -193,84 +171,4 @@ async fn fetch_kline(
             volume: r.volume.parse().unwrap_or(0.0),
         })
         .collect())
-}
-
-/// 方法2: vMS_MarketHistory 按季度爬取
-async fn fetch_quarter(
-    client: &reqwest::Client,
-    symbol: &str,
-    year: u32,
-    quarter: u32,
-) -> Result<Vec<KLinePoint>> {
-    let code: String = symbol.chars().filter(|c| c.is_ascii_digit()).collect();
-    let url = format!(
-        "http://vip.stock.finance.sina.com.cn/corp/go.php/vMS_MarketHistory/\
-         stockid/{code}.phtml?year={year}&jidu={quarter}"
-    );
-
-    let bytes = client
-        .get(&url)
-        .header("Referer", "https://finance.sina.com.cn")
-        .send()
-        .await?
-        .bytes()
-        .await?;
-
-    let (html, _, _) = GBK.decode(&bytes);
-    parse_history_html(&html)
-}
-
-/// 从 HTML 表格解析日K数据
-fn parse_history_html(html: &str) -> Result<Vec<KLinePoint>> {
-    let mut points = Vec::new();
-
-    // 简单状态机: 找 <tr> 中连续的 <td> 内容
-    // 表头: 日期 | 开盘价 | 最高价 | 收盘价 | 最低价 | 成交量 | 成交金额
-    let mut in_row = false;
-    let mut cells: Vec<String> = Vec::new();
-
-    for line in html.lines() {
-        let trimmed = line.trim();
-        if trimmed.contains("<tr") {
-            in_row = true;
-            cells.clear();
-        }
-        if trimmed.contains("</tr>") {
-            if cells.len() >= 7 {
-                // cells[0]=日期 [1]=开盘 [2]=最高 [3]=收盘 [4]=最低 [5]=成交量 [6]=成交额
-                let day = extract_text(&cells[0]);
-                if day.len() == 10 && day.contains('-') {
-                    let open = extract_text(&cells[1]).parse().unwrap_or(0.0);
-                    let high = extract_text(&cells[2]).parse().unwrap_or(0.0);
-                    let close = extract_text(&cells[3]).parse().unwrap_or(0.0);
-                    let low = extract_text(&cells[4]).parse().unwrap_or(0.0);
-                    let vol_str = extract_text(&cells[5]).replace(',', "");
-                    let volume = vol_str.parse().unwrap_or(0.0);
-                    points.push(KLinePoint { day, open, high, low, close, volume });
-                }
-            }
-            in_row = false;
-        }
-        if in_row && trimmed.starts_with("<td") {
-            cells.push(trimmed.to_string());
-        }
-    }
-
-    points.sort_by(|a, b| a.day.cmp(&b.day));
-    Ok(points)
-}
-
-/// 从 HTML 标签中提取纯文本
-fn extract_text(html_cell: &str) -> String {
-    let mut result = String::new();
-    let mut in_tag = false;
-    for ch in html_cell.chars() {
-        match ch {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => result.push(ch),
-            _ => {}
-        }
-    }
-    result.trim().to_string()
 }

@@ -6,6 +6,7 @@ use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tower_http::cors::CorsLayer;
 use tower_http::services::ServeDir;
 use tracing::info;
@@ -28,9 +29,16 @@ struct Cli {
     port: u16,
 }
 
-#[derive(Clone)]
 struct AppState {
     csv_dir: Option<PathBuf>,
+    presets_file: PathBuf,
+    presets: RwLock<Vec<Preset>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct Preset {
+    code: String,
+    label: String,
 }
 
 // ── API 结构体 ──
@@ -172,6 +180,37 @@ async fn handle_range(
     }))
 }
 
+/// GET /api/presets
+async fn handle_get_presets(
+    State(state): State<Arc<AppState>>,
+) -> Json<Vec<Preset>> {
+    let presets = state.presets.read().await;
+    Json(presets.clone())
+}
+
+/// POST /api/presets — 保存预设列表
+async fn handle_set_presets(
+    State(state): State<Arc<AppState>>,
+    Json(new_presets): Json<Vec<Preset>>,
+) -> Result<Json<Vec<Preset>>, StatusCode> {
+    // 写文件
+    let json = serde_json::to_string_pretty(&new_presets)
+        .map_err(|_| StatusCode::BAD_REQUEST)?;
+    tokio::fs::write(&state.presets_file, &json)
+        .await
+        .map_err(|e| {
+            tracing::error!("Failed to write presets: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    // 更新内存
+    let mut presets = state.presets.write().await;
+    *presets = new_presets.clone();
+    info!("[presets] saved {} presets", new_presets.len());
+
+    Ok(Json(new_presets))
+}
+
 async fn handle_health() -> &'static str {
     "OK"
 }
@@ -197,11 +236,33 @@ async fn main() {
         Some(p)
     };
 
-    let state = Arc::new(AppState { csv_dir });
+    // 加载预设（固定在 server/ 目录下，不受 CWD 影响）
+    let presets_file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("presets.json");
+    let presets: Vec<Preset> = if presets_file.exists() {
+        let content = std::fs::read_to_string(&presets_file).unwrap_or_default();
+        serde_json::from_str(&content).unwrap_or_default()
+    } else {
+        let defaults = vec![
+            Preset { code: "sh000001".into(), label: "上证指数".into() },
+            Preset { code: "sz399001".into(), label: "深证成指".into() },
+            Preset { code: "sz399006".into(), label: "创业板指".into() },
+            Preset { code: "sh000688".into(), label: "科创50".into() },
+            Preset { code: "sh000905".into(), label: "中证500".into() },
+            Preset { code: "sh000300".into(), label: "沪深300".into() },
+            Preset { code: "sh000015".into(), label: "红利指数".into() },
+        ];
+        let json = serde_json::to_string_pretty(&defaults).unwrap();
+        std::fs::write(&presets_file, &json).ok();
+        defaults
+    };
+    info!("[presets] file: {:?}, loaded {} presets", presets_file, presets.len());
+
+    let state = Arc::new(AppState { csv_dir, presets_file, presets: RwLock::new(presets) });
 
     let app = Router::new()
         .route("/api/kline", get(handle_kline))
         .route("/api/range", get(handle_range))
+        .route("/api/presets", get(handle_get_presets).post(handle_set_presets))
         .route("/api/health", get(handle_health))
         .fallback_service(
             ServeDir::new(&cli.static_dir).append_index_html_on_directories(true),

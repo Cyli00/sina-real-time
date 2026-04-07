@@ -103,7 +103,11 @@ function cci(H,L,C,n=14) {
 const STRATS = {
   buy_hold:  {name:"一直持有",            color:"#78716c", fn:c=>{const s=Array(c.length).fill(0);s[0]=1;return s;}},
   ma5:       {name:"5日均线向上买向下卖",   color:"#8b5cf6", fn:c=>{const m=sma(c,5),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
-  ma5_break: {name:"站上5日均线买跌破卖",   color:"#22c55e", fn:c=>{const m=sma(c,5),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
+  ma5_break:  {name:"站上5日均线买跌破卖",   color:"#22c55e", fn:c=>{const m=sma(c,5),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
+  ma10_break: {name:"站上10日均线买跌破卖", color:"#059669", fn:c=>{const m=sma(c,10),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
+  ma20_break: {name:"站上20日均线买跌破卖", color:"#d97706", fn:c=>{const m=sma(c,20),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
+  ma30_break: {name:"站上30日均线买跌破卖", color:"#a16207", fn:c=>{const m=sma(c,30),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
+  ma60_break: {name:"站上60日均线买跌破卖", color:"#be185d", fn:c=>{const m=sma(c,60),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
   ma10:      {name:"10日均线向上买向下卖",  color:"#3b82f6", fn:c=>{const m=sma(c,10),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
   ma20:      {name:"20日均线向上买向下卖",  color:"#f97316", fn:c=>{const m=sma(c,20),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
   ma30:      {name:"30日均线向上买向下卖",  color:"#eab308", fn:c=>{const m=sma(c,30),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
@@ -117,16 +121,29 @@ const STRATS = {
    Backtester
    ══════════════════════════════════════════ */
 
-function backtest(data, stratFn, capital) {
-  const C=data.map(d=>+d.close), H=data.map(d=>+d.high), L=data.map(d=>+d.low);
+// execMode: "close" = 当日收盘价成交, "nextOpen" = 次日开盘价成交
+function backtest(data, stratFn, capital, execMode="close") {
+  const C=data.map(d=>+d.close), H=data.map(d=>+d.high), L=data.map(d=>+d.low), O=data.map(d=>+d.open);
   const sig=stratFn(C,H,L);
   let cash=capital, shares=0, trades=0, wins=0, lastBuy=0;
+  let pendingBuy=false, pendingSell=false;
   const eq=[];
   for(let i=0;i<data.length;i++){
-    const p=C[i];
-    if(sig[i]===1&&cash>0){const n=Math.floor(cash/p/100)*100;if(n>0){cash-=n*p;shares=n;lastBuy=p;trades++;}}
-    else if(sig[i]===-1&&shares>0){cash+=shares*p;if(p>lastBuy)wins++;shares=0;}
-    eq.push(Math.round((cash+shares*p)/10000));
+    // 次日开盘价模式：执行前一天的挂起信号
+    if(execMode==="nextOpen"&&i>0){
+      const ep=O[i];
+      if(pendingBuy){if(cash>0){const n=Math.floor(cash/ep/100)*100;if(n>0){cash-=n*ep;shares=n;lastBuy=ep;trades++;}}pendingBuy=false;}
+      else if(pendingSell){if(shares>0){cash+=shares*ep;if(ep>lastBuy)wins++;shares=0;}pendingSell=false;}
+    }
+    if(execMode==="close"){
+      const p=C[i];
+      if(sig[i]===1&&cash>0){const n=Math.floor(cash/p/100)*100;if(n>0){cash-=n*p;shares=n;lastBuy=p;trades++;}}
+      else if(sig[i]===-1&&shares>0){cash+=shares*p;if(p>lastBuy)wins++;shares=0;}
+    } else {
+      if(sig[i]===1) pendingBuy=true;
+      else if(sig[i]===-1) pendingSell=true;
+    }
+    eq.push(Math.round((cash+shares*C[i])/10000));
   }
   const fv=cash+shares*C[C.length-1];
   let peak=capital,maxDD=0;
@@ -138,24 +155,69 @@ function backtest(data, stratFn, capital) {
    Presets & Helpers
    ══════════════════════════════════════════ */
 
-const PRESETS = [
-  {code:"sz399006",label:"创业板指"},{code:"sh000001",label:"上证指数"},
-  {code:"sh000300",label:"沪深300"},{code:"sh600519",label:"贵州茅台"},
-  {code:"sz000858",label:"五粮液"},{code:"sh601318",label:"中国平安"},
-  {code:"sh600036",label:"招商银行"},{code:"sz000001",label:"平安银行"},
+const DEFAULT_PRESETS = [
+  {code:"sh000001",label:"上证指数"},{code:"sz399001",label:"深证成指"},
+  {code:"sz399006",label:"创业板指"},{code:"sh000688",label:"科创50"},
+  {code:"sh000905",label:"中证500"},{code:"sh000300",label:"沪深300"},
+  {code:"sh000015",label:"红利指数"},
 ];
 
 const fmt = n => Number(n).toLocaleString();
+
+// 标准化股票代码：支持 "000001.SZ" / "600519.SH" / 纯数字 "000001"
+function normalizeSymbol(input) {
+  const s = input.trim().toLowerCase();
+  if (/^(sh|sz)\d{6}$/.test(s)) return s;                      // 已是标准格式
+  const dotMatch = s.match(/^(\d{6})\.(sh|sz)$/);              // 000001.sz
+  if (dotMatch) return dotMatch[2] + dotMatch[1];
+  const pureDigit = s.match(/^(\d{6})$/);                      // 纯6位数字
+  if (pureDigit) {
+    const code = pureDigit[1];
+    return (code[0] === '6' ? 'sh' : 'sz') + code;             // 6开头→sh，其余→sz
+  }
+  return s;
+}
 
 /* ══════════════════════════════════════════
    Main Component
    ══════════════════════════════════════════ */
 
 export default function App() {
-  const [symbol, setSymbol] = useState("sz399006");
+  const [presets, setPresets] = useState(DEFAULT_PRESETS);
+  const [symbol, setSymbol] = useState("sh000001");
   const [custom, setCustom] = useState("");
   const [capital, setCapital] = useState(100);
   const [selStrats, setSelStrats] = useState(Object.keys(STRATS));
+
+  // 加载预设
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/presets");
+        if (r.ok) { const data = await r.json(); if (data.length) setPresets(data); }
+      } catch {}
+    })();
+  }, []);
+
+  const savePresets = async (list) => {
+    setPresets(list);
+    try {
+      const r = await fetch("/api/presets", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(list) });
+      if (!r.ok) console.warn("[presets] save failed:", r.status);
+    } catch (e) { console.warn("[presets] save error:", e); }
+  };
+
+  const addPreset = () => {
+    const code = normalizeSymbol(custom);
+    if (!code || presets.some(p => p.code === code)) return;
+    savePresets([...presets, { code, label: stockName || code }]);
+    setCustom("");
+  };
+
+  const removePreset = (code) => {
+    savePresets(presets.filter(p => p.code !== code));
+    if (symbol === code && presets.length > 1) setSymbol(presets.find(p => p.code !== code)?.code || "sh000001");
+  };
 
   // Date range
   const [startDate, setStartDate] = useState("2015-01-01");
@@ -167,11 +229,12 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [stockName, setStockName] = useState("创业板指");
   const [dataSource, setDataSource] = useState("");
+  const [execMode, setExecMode] = useState("nextOpen");  // "close" | "nextOpen"
   const [sortCol, setSortCol] = useState("finalValue");
   const [sortAsc, setSortAsc] = useState(false);
 
   // Probe date range when symbol changes
-  const activeSymbol = custom.trim() || symbol;
+  const activeSymbol = custom.trim() ? normalizeSymbol(custom) : symbol;
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -228,11 +291,11 @@ export default function App() {
     const cap = capital * 10000;
     const res = {};
     for (const key of selStrats) {
-      res[key] = backtest(data, STRATS[key].fn, cap);
+      res[key] = backtest(data, STRATS[key].fn, cap, execMode);
     }
     setResults(res);
     setLoading(false);
-  }, [activeSymbol, startDate, endDate, capital, selStrats, stockName]);
+  }, [activeSymbol, startDate, endDate, capital, selStrats, stockName, execMode]);
 
   // Auto-run on mount
   useEffect(() => { run(); }, []);
@@ -258,8 +321,8 @@ export default function App() {
   /* ── RENDER ── */
 
   const srcBadge = {
-    "sina_http":     {bg:"rgba(34,197,94,.15)",  c:"#22c55e", b:"rgba(34,197,94,.3)",  t:"LIVE · 新浪 HTTP API"},
-    "sina_http+csv": {bg:"rgba(99,102,241,.15)", c:"#818cf8", b:"rgba(99,102,241,.3)", t:"LIVE · HTTP + sina-real-time CSV"},
+    "akshare_qfq":   {bg:"rgba(34,197,94,.15)",  c:"#22c55e", b:"rgba(34,197,94,.3)",  t:"akshare · 前复权"},
+    "akshare_index":  {bg:"rgba(99,102,241,.15)", c:"#818cf8", b:"rgba(99,102,241,.3)", t:"akshare · 指数"},
     "sina_direct":   {bg:"rgba(251,191,36,.15)", c:"#fbbf24", b:"rgba(251,191,36,.3)", t:"直连新浪 (无后端)"},
     "demo":          {bg:"rgba(251,191,36,.15)", c:"#fbbf24", b:"rgba(251,191,36,.3)", t:"DEMO DATA · 模拟数据"},
   }[dataSource] || {bg:"transparent",c:"#666",b:"#333",t:dataSource};
@@ -285,18 +348,32 @@ export default function App() {
           <div style={{...panelStyle}}>
             <SectionLabel>标的选择 · Symbol</SectionLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-              {PRESETS.map(p=>(
-                <Chip key={p.code} active={symbol===p.code&&!custom} onClick={()=>{setSymbol(p.code);setCustom("");}}>{p.label}</Chip>
+              {presets.map(p=>(
+                <div key={p.code} style={{position:"relative",display:"inline-flex"}}>
+                  <Chip active={symbol===p.code&&!custom} onClick={()=>{setSymbol(p.code);setCustom("");}}>{p.label}</Chip>
+                  <button onClick={e=>{e.stopPropagation();removePreset(p.code);}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"rgba(239,68,68,.8)",border:"none",color:"#fff",fontSize:9,lineHeight:"14px",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
               ))}
             </div>
             <div style={{display:"flex",gap:10,marginBottom:14}}>
               <div style={{flex:1}}>
                 <MiniLabel>自定义代码</MiniLabel>
-                <Input value={custom} onChange={e=>setCustom(e.target.value)} placeholder="sh600036, sz000002" />
+                <div style={{display:"flex",gap:6}}>
+                  <Input value={custom} onChange={e=>setCustom(e.target.value)} placeholder="sh600036, sz000002" style={{flex:1}} />
+                  <button onClick={addPreset} disabled={!custom.trim()} style={{padding:"0 12px",fontSize:11,borderRadius:6,cursor:custom.trim()?"pointer":"default",background:custom.trim()?"rgba(34,197,94,.15)":"rgba(255,255,255,.03)",border:"1px solid "+(custom.trim()?"rgba(34,197,94,.4)":"rgba(255,255,255,.06)"),color:custom.trim()?"#22c55e":"#555",whiteSpace:"nowrap"}}>+ 收藏</button>
+                </div>
               </div>
               <div style={{width:120}}>
                 <MiniLabel>初始资金(万)</MiniLabel>
                 <Input type="number" value={capital} onChange={e=>setCapital(+e.target.value)} style={{color:"#fbbf24",fontWeight:600}} />
+              </div>
+              <div style={{width:150}}>
+                <MiniLabel>成交价格</MiniLabel>
+                <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,.1)",height:35}}>
+                  {[["close","当日收盘"],["nextOpen","次日开盘"]].map(([v,label])=>(
+                    <button key={v} onClick={()=>setExecMode(v)} style={{flex:1,fontSize:11,border:"none",cursor:"pointer",background:execMode===v?"rgba(249,115,22,.2)":"rgba(0,0,0,.3)",color:execMode===v?"#fb923c":"#6b7280",fontWeight:execMode===v?600:400,transition:"all .2s"}}>{label}</button>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -371,7 +448,7 @@ export default function App() {
               <LineChart data={chartData} margin={{top:5,right:20,left:10,bottom:5}}>
                 <XAxis dataKey="date" fontSize={9} stroke="#333" tick={{fill:"#555"}} tickFormatter={v=>v.slice(2,7)} interval={Math.floor(chartData.length/12)}/>
                 <YAxis fontSize={9} stroke="#333" tick={{fill:"#555"}} tickFormatter={v=>`${v}万`} domain={["auto","auto"]}/>
-                <Tooltip contentStyle={{background:"rgba(10,10,15,.95)",border:"1px solid rgba(255,255,255,.1)",borderRadius:8,fontSize:11,color:"#e8e6e3"}} labelStyle={{color:"#6b7280",marginBottom:4}} formatter={(v,n)=>[`${fmt(v)}万`,STRATS[n]?.name||n]}/>
+                <Tooltip contentStyle={{background:"rgba(10,10,15,.95)",border:"1px solid rgba(255,255,255,.1)",borderRadius:8,fontSize:11,color:"#e8e6e3"}} labelStyle={{color:"#6b7280",marginBottom:4}} formatter={(v,n)=>[`${fmt(v)}万`,STRATS[n]?.name||n]} itemSorter={(a)=>-a.value}/>
                 <ReferenceLine y={capital} stroke="#444" strokeDasharray="4 4"/>
                 {selStrats.map(k=>results[k]&&<Line key={k} type="monotone" dataKey={k} stroke={STRATS[k].color} strokeWidth={k==="ma20"?2.5:1.5} dot={false} isAnimationActive={false}/>)}
               </LineChart>

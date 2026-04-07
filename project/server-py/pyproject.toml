@@ -1,0 +1,11 @@
+[project]
+name = "server-py"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "akshare>=1.18.53",
+    "fastapi>=0.135.3",
+    "uvicorn>=0.44.0",
+]

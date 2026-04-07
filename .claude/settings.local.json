@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x \"e:/gitProjects/sina-real-time/project/dev.sh\")",
+      "WebFetch(domain:vip.stock.finance.sina.com.cn)"
+    ]
+  }
+}
