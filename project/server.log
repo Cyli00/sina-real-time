@@ -1,23 +1,22 @@
-[32mINFO[0m:     Will watch for changes in these directories: ['E:\\gitProjects\\sina-real-time\\project\\server-py']
-[32mINFO[0m:     Uvicorn running on [1mhttp://0.0.0.0:4000[0m (Press CTRL+C to quit)
-[32mINFO[0m:     Started reloader process [[36m[1m33808[0m] using [36m[1mStatReload[0m
-[32mINFO[0m:     Started server process [[36m18000[0m]
+[32mINFO[0m:     Started server process [[36m20500[0m]
 [32mINFO[0m:     Waiting for application startup.
 [32mINFO[0m:     Application startup complete.
-2026-04-07 21:05:37,984 [akshare] cache miss, fetching sh000001
-2026-04-07 21:05:37,984 [akshare] cache miss, fetching sh000001
-2026-04-07 21:05:39,670 [akshare] fetch name failed for sh000001: ''
-2026-04-07 21:05:46,909 [akshare] cache miss, fetching sz399001
-2026-04-07 21:05:47,888 [akshare] fetch name failed for sz399001: ''
-2026-04-07 21:05:50,861 [akshare] cache miss, fetching sz399006
-2026-04-07 21:05:51,548 [akshare] fetch name failed for sz399006: ''
-2026-04-07 21:05:59,498 [akshare] cache miss, fetching sh000688
-2026-04-07 21:06:00,276 [akshare] fetch name failed for sh000688: ''
-2026-04-07 21:06:19,055 [akshare] cache miss, fetching sh000300
-2026-04-07 21:06:19,671 [akshare] cache miss, fetching sh000300
-2026-04-07 21:06:20,018 [akshare] fetch name failed for sh000300: ''
-2026-04-07 21:06:21,791 [akshare] cache miss, fetching sh000015
-2026-04-07 21:06:22,285 [akshare] cache miss, fetching sh000015
-2026-04-07 21:06:22,815 [akshare] fetch name failed for sh000015: ''
-2026-04-07 21:09:03,607 [akshare] cache miss, fetching sh000905
-2026-04-07 21:09:04,451 [akshare] fetch name failed for sh000905: ''
+[32mINFO[0m:     Uvicorn running on [1mhttp://0.0.0.0:4000[0m (Press CTRL+C to quit)
+2026-04-07 22:13:56,770 [akshare] cache miss, fetching sh000001
+2026-04-07 22:13:56,771 [akshare] cache miss, fetching sh000001
+2026-04-07 22:13:56,772 [akshare] cache miss, fetching sh000001
+2026-04-07 22:13:57,708 [akshare] fetch name failed for sh000001: ''
+2026-04-07 22:13:57,709 [akshare] fetch name failed for sh000001: ''
+2026-04-07 22:13:57,710 [akshare] fetch name failed for sh000001: ''
+2026-04-07 22:14:00,285 [akshare] cache miss, fetching sz399006
+2026-04-07 22:14:00,851 [akshare] fetch name failed for sz399006: ''
+2026-04-07 22:14:02,182 [akshare] cache miss, fetching sz399001
+2026-04-07 22:14:03,085 [akshare] fetch name failed for sz399001: ''
+2026-04-07 22:14:42,821 [akshare] cache miss, fetching sh000300
+2026-04-07 22:14:43,582 [akshare] fetch name failed for sh000300: ''
+2026-04-07 22:14:51,873 [akshare] cache miss, fetching sh000015
+2026-04-07 22:14:52,531 [akshare] fetch name failed for sh000015: ''
+2026-04-07 22:15:06,286 [akshare] cache miss, fetching sh000688
+2026-04-07 22:15:06,884 [akshare] cache miss, fetching sh000688
+2026-04-07 22:15:07,035 [akshare] fetch name failed for sh000688: ''
+2026-04-07 22:15:07,035 [akshare] fetch name failed for sh000688: ''

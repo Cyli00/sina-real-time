@@ -47,7 +47,7 @@ Write-Host "== Backend ready ==" -ForegroundColor Green
 Write-Host ""
 Write-Host "== Start Frontend (port 3000, proxy /api -> 4000) ==" -ForegroundColor Cyan
 Set-Location "$root\client"
-npm install --silent
+npm install
 npm run dev
 
 # Ctrl+C exits frontend, clean up backend

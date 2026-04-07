@@ -3,6 +3,7 @@
 import json
 import time
 import logging
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -23,6 +24,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 CACHE: dict[str, tuple[list[dict], float]] = {}
 CACHE_TTL = 600  # 10 分钟
+_akshare_lock = threading.Lock()  # akshare 内部 V8 引擎不支持并发
 
 PRESETS_FILE = Path(__file__).parent / "presets.json"
 
@@ -51,11 +53,17 @@ def fetch_kline_cached(symbol: str) -> list[dict]:
             return data
 
     log.info(f"[akshare] cache miss, fetching {symbol}")
-    try:
-        data = _fetch_kline(symbol)
-    except Exception as e:
-        log.error(f"[akshare] fetch failed for {symbol}: {e}")
-        data = []
+    with _akshare_lock:
+        # 拿到锁后再检查一次缓存（另一个请求可能已经填充了）
+        if symbol in CACHE:
+            data, ts = CACHE[symbol]
+            if now - ts < CACHE_TTL:
+                return data
+        try:
+            data = _fetch_kline(symbol)
+        except Exception as e:
+            log.error(f"[akshare] fetch failed for {symbol}: {e}")
+            data = []
 
     CACHE[symbol] = (data, now)
     return data
@@ -218,4 +226,4 @@ if DIST_DIR.exists():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=4000, reload=True)
+    uvicorn.run("app:app", host="0.0.0.0", port=4000)

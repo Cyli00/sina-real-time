@@ -57,88 +57,66 @@ function generateDemo(symbol, start, end) {
 }
 
 /* ══════════════════════════════════════════
-   Technical Indicators
+   Strategies (imported from utils/)
    ══════════════════════════════════════════ */
 
-const sma = (c,n) => { const r=Array(c.length).fill(null); for(let i=n-1;i<c.length;i++){let s=0;for(let j=i-n+1;j<=i;j++)s+=c[j];r[i]=s/n;} return r; };
-const ema = (c,n) => { const r=[...c]; const k=2/(n+1); for(let i=1;i<c.length;i++) r[i]=c[i]*k+r[i-1]*(1-k); return r.map((v,i)=>i>=n-1?v:null); };
-
-function macd(c) {
-  const e12=ema(c,12),e26=ema(c,26);
-  const dif=c.map((_,i)=>(e12[i]!=null&&e26[i]!=null)?e12[i]-e26[i]:null);
-  const vd=dif.filter(v=>v!=null), deaR=ema(vd,9), dea=Array(c.length).fill(null);
-  let idx=0; for(let i=0;i<dif.length;i++) if(dif[i]!=null) dea[i]=deaR[idx++]??null;
-  return {dif,dea};
-}
-
-function kdj(H,L,C,n=9) {
-  const len=C.length, K=Array(len).fill(null), D=Array(len).fill(null);
-  let pK=50,pD=50;
-  for(let i=n-1;i<len;i++){
-    let hh=-Infinity,ll=Infinity;
-    for(let j=i-n+1;j<=i;j++){if(H[j]>hh)hh=H[j];if(L[j]<ll)ll=L[j];}
-    const rsv=hh===ll?50:((C[i]-ll)/(hh-ll))*100;
-    const k=(2/3)*pK+(1/3)*rsv, d=(2/3)*pD+(1/3)*k;
-    K[i]=k;D[i]=d;pK=k;pD=d;
-  }
-  return {K,D};
-}
-
-function cci(H,L,C,n=14) {
-  const r=Array(C.length).fill(null);
-  for(let i=n-1;i<C.length;i++){
-    let sTP=0; for(let j=i-n+1;j<=i;j++) sTP+=(H[j]+L[j]+C[j])/3;
-    const ma=sTP/n; let sd=0;
-    for(let j=i-n+1;j<=i;j++) sd+=Math.abs((H[j]+L[j]+C[j])/3-ma);
-    const md=sd/n, tp=(H[i]+L[i]+C[i])/3;
-    r[i]=md===0?0:(tp-ma)/(0.015*md);
-  }
-  return r;
-}
-
-/* ══════════════════════════════════════════
-   Strategies
-   ══════════════════════════════════════════ */
+import { MA_STRATS } from "./utils/ma";
+import { MACD_STRATS } from "./utils/macd";
+import { STOCH_RSI_STRATS } from "./utils/stochRsi";
 
 const STRATS = {
-  buy_hold:  {name:"一直持有",            color:"#78716c", fn:c=>{const s=Array(c.length).fill(0);s[0]=1;return s;}},
-  ma5:       {name:"5日均线向上买向下卖",   color:"#8b5cf6", fn:c=>{const m=sma(c,5),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
-  ma5_break:  {name:"站上5日均线买跌破卖",   color:"#22c55e", fn:c=>{const m=sma(c,5),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
-  ma10_break: {name:"站上10日均线买跌破卖", color:"#059669", fn:c=>{const m=sma(c,10),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
-  ma20_break: {name:"站上20日均线买跌破卖", color:"#d97706", fn:c=>{const m=sma(c,20),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
-  ma30_break: {name:"站上30日均线买跌破卖", color:"#a16207", fn:c=>{const m=sma(c,30),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
-  ma60_break: {name:"站上60日均线买跌破卖", color:"#be185d", fn:c=>{const m=sma(c,60),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null){if(c[i]>m[i]&&c[i-1]<=(m[i-1]??c[i-1]))s[i]=1;else if(c[i]<m[i]&&c[i-1]>=(m[i-1]??c[i-1]))s[i]=-1;}return s;}},
-  ma10:      {name:"10日均线向上买向下卖",  color:"#3b82f6", fn:c=>{const m=sma(c,10),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
-  ma20:      {name:"20日均线向上买向下卖",  color:"#f97316", fn:c=>{const m=sma(c,20),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
-  ma30:      {name:"30日均线向上买向下卖",  color:"#eab308", fn:c=>{const m=sma(c,30),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
-  ma60:      {name:"60日均线向上买向下卖",  color:"#ec4899", fn:c=>{const m=sma(c,60),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(m[i]!=null&&m[i-1]!=null){if(m[i]>m[i-1]&&m[i-1]<=(m[i-2]??m[i-1])&&c[i]>m[i])s[i]=1;else if(m[i]<m[i-1]&&c[i]<m[i])s[i]=-1;}return s;}},
-  macd_x:    {name:"MACD金叉买死叉卖",    color:"#6366f1", fn:c=>{const{dif,dea}=macd(c),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(dif[i]!=null&&dea[i]!=null&&dif[i-1]!=null&&dea[i-1]!=null){if(dif[i]>dea[i]&&dif[i-1]<=dea[i-1])s[i]=1;else if(dif[i]<dea[i]&&dif[i-1]>=dea[i-1])s[i]=-1;}return s;}},
-  kdj_x:     {name:"KDJ金叉买死叉卖",     color:"#f43f5e", fn:(c,h,l)=>{const{K,D}=kdj(h,l,c),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(K[i]!=null&&D[i]!=null&&K[i-1]!=null&&D[i-1]!=null){if(K[i]>D[i]&&K[i-1]<=D[i-1])s[i]=1;else if(K[i]<D[i]&&K[i-1]>=D[i-1])s[i]=-1;}return s;}},
-  cci_100:   {name:"CCI上100买下100卖",   color:"#14b8a6", fn:(c,h,l)=>{const cc=cci(h,l,c),s=Array(c.length).fill(0);for(let i=1;i<c.length;i++)if(cc[i]!=null&&cc[i-1]!=null){if(cc[i]>100&&cc[i-1]<=100)s[i]=1;else if(cc[i]<-100&&cc[i-1]>=-100)s[i]=-1;}return s;}},
+  buy_hold: { name: "一直持有", color: "#78716c", fn: (c) => { const s = Array(c.length).fill(0); s[0] = 1; return s; } },
+  ...MA_STRATS,
+  ...MACD_STRATS,
+  ...STOCH_RSI_STRATS,
 };
 
 /* ══════════════════════════════════════════
    Backtester
    ══════════════════════════════════════════ */
 
-// execMode: "close" = 当日收盘价成交, "nextOpen" = 次日开盘价成交
-function backtest(data, stratFn, capital, execMode="close") {
+// execMode: "close" | "nextOpen"
+// commRate: 佣金费率（如 0.0005 = 万5），买卖双边收取
+// stampRate: 印花税费率（如 0.001 = 千1），仅卖出收取
+function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRate=0) {
   const C=data.map(d=>+d.close), H=data.map(d=>+d.high), L=data.map(d=>+d.low), O=data.map(d=>+d.open);
   const sig=stratFn(C,H,L);
-  let cash=capital, shares=0, trades=0, wins=0, lastBuy=0;
+  let cash=capital, shares=0, trades=0, wins=0, lastBuyCost=0;
   let pendingBuy=false, pendingSell=false;
   const eq=[];
+
+  function doBuy(price) {
+    if (cash <= 0) return;
+    // 考虑佣金后能买的股数：cost = n * price * (1 + commRate)
+    const n = Math.floor(cash / (price * (1 + commRate)) / 100) * 100;
+    if (n <= 0) return;
+    const cost = n * price;
+    const fee = cost * commRate;
+    cash -= cost + fee;
+    shares = n;
+    lastBuyCost = cost + fee;  // 买入总成本（含佣金）
+    trades++;
+  }
+
+  function doSell(price) {
+    if (shares <= 0) return;
+    const gross = shares * price;
+    const fee = gross * commRate + gross * stampRate;  // 佣金 + 印花税
+    const net = gross - fee;
+    if (net > lastBuyCost) wins++;
+    cash += net;
+    shares = 0;
+  }
+
   for(let i=0;i<data.length;i++){
-    // 次日开盘价模式：执行前一天的挂起信号
     if(execMode==="nextOpen"&&i>0){
       const ep=O[i];
-      if(pendingBuy){if(cash>0){const n=Math.floor(cash/ep/100)*100;if(n>0){cash-=n*ep;shares=n;lastBuy=ep;trades++;}}pendingBuy=false;}
-      else if(pendingSell){if(shares>0){cash+=shares*ep;if(ep>lastBuy)wins++;shares=0;}pendingSell=false;}
+      if(pendingBuy){ doBuy(ep); pendingBuy=false; }
+      else if(pendingSell){ doSell(ep); pendingSell=false; }
     }
     if(execMode==="close"){
-      const p=C[i];
-      if(sig[i]===1&&cash>0){const n=Math.floor(cash/p/100)*100;if(n>0){cash-=n*p;shares=n;lastBuy=p;trades++;}}
-      else if(sig[i]===-1&&shares>0){cash+=shares*p;if(p>lastBuy)wins++;shares=0;}
+      if(sig[i]===1) doBuy(C[i]);
+      else if(sig[i]===-1) doSell(C[i]);
     } else {
       if(sig[i]===1) pendingBuy=true;
       else if(sig[i]===-1) pendingSell=true;
@@ -227,9 +205,11 @@ export default function App() {
   const [rawData, setRawData] = useState(null);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [stockName, setStockName] = useState("创业板指");
+  const [stockName, setStockName] = useState("上证指数");
   const [dataSource, setDataSource] = useState("");
   const [execMode, setExecMode] = useState("nextOpen");  // "close" | "nextOpen"
+  const [commission, setCommission] = useState(5);       // 万分之N（万5）
+  const [stampTax, setStampTax] = useState(10);           // 万分之N（千1 = 万10）
   const [sortCol, setSortCol] = useState("finalValue");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -243,9 +223,6 @@ export default function App() {
       if (info) {
         setRangeInfo(info);
         setStockName(info.name || activeSymbol);
-        // 自动设置日期范围为最大可用范围
-        if (info.earliest_date) setStartDate(info.earliest_date);
-        if (info.latest_date) setEndDate(info.latest_date);
       } else {
         setRangeInfo(null);
       }
@@ -291,11 +268,16 @@ export default function App() {
     const cap = capital * 10000;
     const res = {};
     for (const key of selStrats) {
-      res[key] = backtest(data, STRATS[key].fn, cap, execMode);
+      // 指数不计费（sh000xxx / sz399xxx）
+      const code = activeSymbol.slice(2);
+      const isIdx = (activeSymbol.startsWith("sh") && code.startsWith("000")) || (activeSymbol.startsWith("sz") && code.startsWith("399"));
+      const cr = isIdx ? 0 : commission / 10000;
+      const sr = isIdx ? 0 : stampTax / 10000;
+      res[key] = backtest(data, STRATS[key].fn, cap, execMode, cr, sr);
     }
     setResults(res);
     setLoading(false);
-  }, [activeSymbol, startDate, endDate, capital, selStrats, stockName, execMode]);
+  }, [activeSymbol, startDate, endDate, capital, selStrats, stockName, execMode, commission, stampTax]);
 
   // Auto-run on mount
   useEffect(() => { run(); }, []);
@@ -350,7 +332,7 @@ export default function App() {
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
               {presets.map(p=>(
                 <div key={p.code} style={{position:"relative",display:"inline-flex"}}>
-                  <Chip active={symbol===p.code&&!custom} onClick={()=>{setSymbol(p.code);setCustom("");}}>{p.label}</Chip>
+                  <Chip active={symbol===p.code&&!custom} onClick={()=>{setSymbol(p.code);setCustom("");setStockName(p.label);}}>{p.label}</Chip>
                   <button onClick={e=>{e.stopPropagation();removePreset(p.code);}} style={{position:"absolute",top:-4,right:-4,width:14,height:14,borderRadius:"50%",background:"rgba(239,68,68,.8)",border:"none",color:"#fff",fontSize:9,lineHeight:"14px",cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                 </div>
               ))}
@@ -374,6 +356,14 @@ export default function App() {
                     <button key={v} onClick={()=>setExecMode(v)} style={{flex:1,fontSize:11,border:"none",cursor:"pointer",background:execMode===v?"rgba(249,115,22,.2)":"rgba(0,0,0,.3)",color:execMode===v?"#fb923c":"#6b7280",fontWeight:execMode===v?600:400,transition:"all .2s"}}>{label}</button>
                   ))}
                 </div>
+              </div>
+              <div style={{width:90}}>
+                <MiniLabel>佣金(万分)</MiniLabel>
+                <Input type="number" value={commission} onChange={e=>setCommission(+e.target.value)} style={{color:"#9ca3af"}} />
+              </div>
+              <div style={{width:90}}>
+                <MiniLabel>印花税(万分)</MiniLabel>
+                <Input type="number" value={stampTax} onChange={e=>setStampTax(+e.target.value)} style={{color:"#9ca3af"}} />
               </div>
             </div>
 
