@@ -8,7 +8,7 @@
 //       再用方法2按季度往前补数据，最后去重排序裁剪。
 
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use encoding_rs::GBK;
 use serde::{Deserialize, Serialize};
 use tracing::info;
