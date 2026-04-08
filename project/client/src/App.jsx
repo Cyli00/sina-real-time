@@ -365,7 +365,7 @@ export default function App() {
         <div style={{width:40,height:40,borderRadius:8,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#fff"}}>量</div>
         <div>
           <h1 style={{margin:0,fontSize:22,fontWeight:700,letterSpacing:1,background:"linear-gradient(90deg,#f97316,#fb923c,#fbbf24)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>策略回测平台</h1>
-          <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>STRATEGY BACKTESTING · sina-real-time + Sina HTTP API</p>
+          <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>STRATEGY BACKTESTING</p>
         </div>
         {dataSource && <span style={{marginLeft:"auto",fontSize:10,padding:"3px 10px",background:srcBadge.bg,color:srcBadge.c,borderRadius:4,border:`1px solid ${srcBadge.b}`}}>{srcBadge.t}</span>}
       </div>
