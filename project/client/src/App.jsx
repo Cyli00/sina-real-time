@@ -539,7 +539,7 @@ export default function App() {
 
         {/* ── FOOTER ── */}
         <div style={{marginTop:20,padding:"14px 0",borderTop:"1px solid rgba(255,255,255,.04)",fontSize:10,color:"#333",textAlign:"center",letterSpacing:1}}>
-          数据采集: sina-real-time (Python + akshare) · 历史数据: 东方财富/新浪 · 回测结果仅供参考，不构成投资建议
+          数据采集: Python + akshare · 历史数据: 东方财富 · 回测结果仅供参考，不构成投资建议
         </div>
       </div>
     </div>

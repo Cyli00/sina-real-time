@@ -77,34 +77,52 @@ def fetch_kline_cached(symbol: str) -> list[dict]:
     return data
 
 
-def _df_to_records(df, date_col="date") -> list[dict]:
-    """DataFrame 转标准记录列表"""
+def _df_to_records(df, date_col="date", col_map=None) -> list[dict]:
+    """DataFrame 转标准记录列表，col_map 用于映射中文列名"""
+    if col_map is None:
+        col_map = {"open": "open", "high": "high", "low": "low", "close": "close", "volume": "volume"}
     records = []
     for _, row in df.iterrows():
         records.append({
             "day": str(row[date_col])[:10],
-            "open": round(float(row["open"]), 2),
-            "high": round(float(row["high"]), 2),
-            "low": round(float(row["low"]), 2),
-            "close": round(float(row["close"]), 2),
-            "volume": float(row["volume"]),
+            "open": round(float(row[col_map["open"]]), 2),
+            "high": round(float(row[col_map["high"]]), 2),
+            "low": round(float(row[col_map["low"]]), 2),
+            "close": round(float(row[col_map["close"]]), 2),
+            "volume": float(row[col_map["volume"]]),
         })
     return records
 
 
+# 东财接口统一的中文列名映射
+_EM_COL_MAP = {"open": "开盘", "high": "最高", "low": "最低", "close": "收盘", "volume": "成交量"}
+
+
 def _fetch_kline(symbol: str) -> list[dict]:
-    """实际拉取逻辑"""
+    """东财优先拉取，失败时 fallback 到新浪"""
+    code = symbol[2:]  # 去掉 sh/sz 前缀
     stype = _symbol_type(symbol)
 
+    # 优先：东方财富
+    try:
+        if stype == "index":
+            df = ak.index_zh_a_hist(symbol=code, period="daily")
+        elif stype == "etf":
+            df = ak.fund_etf_hist_em(symbol=code, period="daily", adjust="qfq")
+        else:
+            df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq")
+        return _df_to_records(df, date_col="日期", col_map=_EM_COL_MAP)
+    except Exception as e:
+        log.warning(f"[akshare] 东财接口失败 {symbol}: {e}，尝试新浪 fallback")
+
+    # fallback：新浪
     if stype == "index":
         df = ak.stock_zh_index_daily(symbol=symbol)
-        return _df_to_records(df)
     elif stype == "etf":
         df = ak.fund_etf_hist_sina(symbol=symbol)
-        return _df_to_records(df)
     else:
         df = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
-        return _df_to_records(df)
+    return _df_to_records(df)
 
 
 def _sina_name(symbol: str) -> Optional[str]:

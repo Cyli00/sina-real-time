@@ -4,7 +4,10 @@
       "Bash(chmod +x \"e:/gitProjects/sina-real-time/project/dev.sh\")",
       "WebFetch(domain:vip.stock.finance.sina.com.cn)",
       "Bash(.venv/Scripts/python.exe -c ':*)",
-      "WebFetch(domain:akshare.akfamily.xyz)"
+      "WebFetch(domain:akshare.akfamily.xyz)",
+      "Bash(e:/gitProjects/sina-real-time/project/server-py/.venv/Scripts/python.exe -c \"import akshare as ak; funcs = [f for f in dir\\(ak\\) if 'index' in f and 'hist' in f]; print\\('\\\\n'.join\\(funcs\\)\\)\")",
+      "Bash(e:/gitProjects/sina-real-time/project/server-py/.venv/Scripts/python.exe -c \"import akshare as ak; funcs = [f for f in dir\\(ak\\) if 'etf' in f and 'hist' in f]; print\\('\\\\n'.join\\(funcs\\)\\)\")",
+      "Bash(e:/gitProjects/sina-real-time/project/server-py/.venv/Scripts/python.exe -c ':*)"
     ]
   }
 }
