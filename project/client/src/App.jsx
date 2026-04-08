@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceL
 
 /* ══════════════════════════════════════════
    API Layer
-   - 优先通过 Rust 后端 /api/*
+   - 优先通过 Python 后端 /api/*
    - 后端不可用时 fallback 到直连新浪 + demo
    ══════════════════════════════════════════ */
 
@@ -62,13 +62,11 @@ function generateDemo(symbol, start, end) {
 
 import { MA_STRATS } from "./utils/ma";
 import { MACD_STRATS } from "./utils/macd";
-import { STOCH_RSI_STRATS } from "./utils/stochRsi";
 
 const STRATS = {
   buy_hold: { name: "一直持有", color: "#78716c", fn: (c) => { const s = Array(c.length).fill(0); s[0] = 1; return s; } },
   ...MA_STRATS,
   ...MACD_STRATS,
-  ...STOCH_RSI_STRATS,
 };
 
 /* ══════════════════════════════════════════
@@ -78,31 +76,55 @@ const STRATS = {
 // execMode: "close" | "nextOpen"
 // commRate: 佣金费率（如 0.0005 = 万5），买卖双边收取
 // stampRate: 印花税费率（如 0.001 = 千1），仅卖出收取
-function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRate=0) {
+// minComm: 最低佣金（元），单笔不足按此数收取
+// slipBps: 滑点（万分之N），买入加价、卖出减价
+// limitRate: 涨跌停幅度（0.1=10%），0 表示不检查（指数）
+function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRate=0, minComm=0, slipBps=0, limitRate=0, isIndex=false) {
   const C=data.map(d=>+d.close), H=data.map(d=>+d.high), L=data.map(d=>+d.low), O=data.map(d=>+d.open);
   const sig=stratFn(C,H,L);
-  let cash=capital, shares=0, trades=0, wins=0, lastBuyCost=0;
+  let cash=capital, shares=0, completedTrades=0, wins=0, lastBuyCost=0;
   let pendingBuy=false, pendingSell=false;
+  let lastBuyBar=-2;
   const eq=[];
 
-  function doBuy(price) {
-    if (cash <= 0) return;
-    // 考虑佣金后能买的股数：cost = n * price * (1 + commRate)
-    const n = Math.floor(cash / (price * (1 + commRate)) / 100) * 100;
-    if (n <= 0) return;
-    const cost = n * price;
-    const fee = cost * commRate;
-    cash -= cost + fee;
-    shares = n;
-    lastBuyCost = cost + fee;  // 买入总成本（含佣金）
-    trades++;
+  // 涨跌停判断（前复权数据在除权日可能误判，属已知局限）
+  function isLimitUp(bar, price) {
+    if (bar === 0 || limitRate <= 0) return false;
+    return price >= Math.round(C[bar-1] * (1 + limitRate) * 100) / 100;
+  }
+  function isLimitDown(bar, price) {
+    if (bar === 0 || limitRate <= 0) return false;
+    return price <= Math.round(C[bar-1] * (1 - limitRate) * 100) / 100;
+  }
+  function slip(price, isBuy) {
+    return slipBps > 0 ? price * (1 + (isBuy ? 1 : -1) * slipBps / 10000) : price;
   }
 
-  function doSell(price) {
-    if (shares <= 0) return;
+  function doBuy(rawPrice, bar) {
+    if (shares > 0 || cash <= 0 || isLimitUp(bar, rawPrice)) return;
+    const price = slip(rawPrice, true);
+    let n = isIndex
+      ? Math.floor(cash / (price * (1 + commRate)))        // 指数：不做整手约束
+      : Math.floor(cash / (price * (1 + commRate)) / 100) * 100;  // 个股：100股整手
+    if (n <= 0) return;
+    let cost = n * price;
+    let fee = Math.max(cost * commRate, minComm);
+    while (cost + fee > cash && n > 0) { n -= isIndex ? 1 : 100; cost = n * price; fee = Math.max(cost * commRate, minComm); }
+    if (n <= 0) return;
+    cash -= cost + fee;
+    shares = n;
+    lastBuyCost = cost + fee;
+    lastBuyBar = bar;
+  }
+
+  function doSell(rawPrice, bar) {
+    if (shares <= 0 || bar <= lastBuyBar) return;  // T+1
+    if (isLimitDown(bar, rawPrice)) return;
+    const price = slip(rawPrice, false);
     const gross = shares * price;
-    const fee = gross * commRate + gross * stampRate;  // 佣金 + 印花税
+    const fee = Math.min(Math.max(gross * commRate, minComm) + gross * stampRate, gross);  // 手续费不超过卖出所得
     const net = gross - fee;
+    completedTrades++;
     if (net > lastBuyCost) wins++;
     cash += net;
     shares = 0;
@@ -110,23 +132,22 @@ function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRat
 
   for(let i=0;i<data.length;i++){
     if(execMode==="nextOpen"&&i>0){
-      const ep=O[i];
-      if(pendingBuy){ doBuy(ep); pendingBuy=false; }
-      else if(pendingSell){ doSell(ep); pendingSell=false; }
+      if(pendingBuy){ doBuy(O[i], i); pendingBuy=false; }
+      else if(pendingSell){ doSell(O[i], i); pendingSell=false; }
     }
     if(execMode==="close"){
-      if(sig[i]===1) doBuy(C[i]);
-      else if(sig[i]===-1) doSell(C[i]);
+      if(sig[i]===1) doBuy(C[i], i);
+      else if(sig[i]===-1) doSell(C[i], i);
     } else {
       if(sig[i]===1) pendingBuy=true;
       else if(sig[i]===-1) pendingSell=true;
     }
-    eq.push(Math.round((cash+shares*C[i])/10000));
+    eq.push(+((cash+shares*C[i])/10000).toFixed(2));
   }
   const fv=cash+shares*C[C.length-1];
-  let peak=capital,maxDD=0;
-  eq.forEach(v=>{const rv=v*10000;if(rv>peak)peak=rv;const dd=(peak-rv)/peak;if(dd>maxDD)maxDD=dd;});
-  return{equity:eq,totalReturn:((fv-capital)/capital*100).toFixed(1),trades,winRate:trades?((wins/Math.ceil(trades))*100).toFixed(1):"0",maxDrawdown:(maxDD*100).toFixed(1),finalValue:Math.round(fv/10000)};
+  let peak=-Infinity,maxDD=0;
+  eq.forEach(v=>{if(v>peak)peak=v;const dd=peak>0?(peak-v)/peak:0;if(dd>maxDD)maxDD=dd;});
+  return{equity:eq,totalReturn:((fv-capital)/capital*100).toFixed(1),trades:completedTrades,winRate:completedTrades?((wins/completedTrades)*100).toFixed(1):"0",maxDrawdown:(maxDD*100).toFixed(1),finalValue:+(fv/10000).toFixed(2)};
 }
 
 /* ══════════════════════════════════════════
@@ -142,18 +163,29 @@ const DEFAULT_PRESETS = [
 
 const fmt = n => Number(n).toLocaleString();
 
-// 标准化股票代码：支持 "000001.SZ" / "600519.SH" / 纯数字 "000001"
+// 标准化股票代码：支持 "000001.SZ" / "600519.SH" / "830799.BJ" / 纯数字
 function normalizeSymbol(input) {
   const s = input.trim().toLowerCase();
-  if (/^(sh|sz)\d{6}$/.test(s)) return s;                      // 已是标准格式
-  const dotMatch = s.match(/^(\d{6})\.(sh|sz)$/);              // 000001.sz
+  if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
+  const dotMatch = s.match(/^(\d{6})\.(sh|sz|bj)$/);
   if (dotMatch) return dotMatch[2] + dotMatch[1];
-  const pureDigit = s.match(/^(\d{6})$/);                      // 纯6位数字
+  const pureDigit = s.match(/^(\d{6})$/);
   if (pureDigit) {
     const code = pureDigit[1];
-    return (code[0] === '6' ? 'sh' : 'sz') + code;             // 6开头→sh，其余→sz
+    if (code[0] === '6' || code[0] === '5') return 'sh' + code;  // 6xxxxx 个股, 5xxxxx ETF
+    if (code[0] === '8' || code[0] === '4') return 'bj' + code;  // 北交所
+    return 'sz' + code;
   }
   return s;
+}
+
+// 根据股票代码判断涨跌停幅度
+function getLimitRate(symbol) {
+  const code = symbol.slice(2);
+  if (code.startsWith("688")) return 0.2;   // 科创板 20%
+  if (code.startsWith("300")) return 0.2;   // 创业板 20%
+  if (code[0] === "8" || code[0] === "4") return 0.3;  // 北交所 30%
+  return 0.1;  // 主板 10%
 }
 
 /* ══════════════════════════════════════════
@@ -185,10 +217,13 @@ export default function App() {
     } catch (e) { console.warn("[presets] save error:", e); }
   };
 
-  const addPreset = () => {
+  const addPreset = async () => {
     const code = normalizeSymbol(custom);
     if (!code || presets.some(p => p.code === code)) return;
-    savePresets([...presets, { code, label: stockName || code }]);
+    const info = await apiFetchRange(code);
+    const name = info?.name || code;
+    savePresets([...presets, { code, label: name }]);
+    setStockName(name);
     setCustom("");
   };
 
@@ -210,6 +245,8 @@ export default function App() {
   const [execMode, setExecMode] = useState("nextOpen");  // "close" | "nextOpen"
   const [commission, setCommission] = useState(5);       // 万分之N（万5）
   const [stampTax, setStampTax] = useState(10);           // 万分之N（千1 = 万10）
+  const [minComm, setMinComm] = useState(5);              // 最低佣金（元）
+  const [slippage, setSlippage] = useState(0);            // 滑点（万分之N）
   const [sortCol, setSortCol] = useState("finalValue");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -222,7 +259,13 @@ export default function App() {
       if (cancelled) return;
       if (info) {
         setRangeInfo(info);
-        setStockName(info.name || activeSymbol);
+        const name = info.name || activeSymbol;
+        setStockName(name);
+        // 如果 preset 的 label 还是代码，用真实名称回填
+        if (name !== activeSymbol) {
+          const p = presets.find(p => p.code === activeSymbol && p.label === p.code);
+          if (p) savePresets(presets.map(x => x.code === activeSymbol ? { ...x, label: name } : x));
+        }
       } else {
         setRangeInfo(null);
       }
@@ -266,18 +309,23 @@ export default function App() {
     setRawData(data); setStockName(name); setDataSource(src);
 
     const cap = capital * 10000;
+    const code = activeSymbol.slice(2);
+    const isIdx = (activeSymbol.startsWith("sh") && code.startsWith("000")) || (activeSymbol.startsWith("sz") && code.startsWith("399"));
+    const isEtf = (activeSymbol.startsWith("sh") && (code.startsWith("51") || code.startsWith("56") || code.startsWith("58")))
+               || (activeSymbol.startsWith("sz") && (code.startsWith("15") || code.startsWith("16")));
+    const noFee = isIdx || isEtf;
+    const cr = noFee ? 0 : commission / 10000;
+    const sr = noFee ? 0 : stampTax / 10000;
+    const mc = noFee ? 0 : minComm;
+    const sl = noFee ? 0 : slippage;
+    const lr = noFee ? 0 : getLimitRate(activeSymbol);
     const res = {};
     for (const key of selStrats) {
-      // 指数不计费（sh000xxx / sz399xxx）
-      const code = activeSymbol.slice(2);
-      const isIdx = (activeSymbol.startsWith("sh") && code.startsWith("000")) || (activeSymbol.startsWith("sz") && code.startsWith("399"));
-      const cr = isIdx ? 0 : commission / 10000;
-      const sr = isIdx ? 0 : stampTax / 10000;
-      res[key] = backtest(data, STRATS[key].fn, cap, execMode, cr, sr);
+      res[key] = backtest(data, STRATS[key].fn, cap, execMode, cr, sr, mc, sl, lr, noFee);
     }
     setResults(res);
     setLoading(false);
-  }, [activeSymbol, startDate, endDate, capital, selStrats, stockName, execMode, commission, stampTax]);
+  }, [activeSymbol, startDate, endDate, capital, selStrats, stockName, execMode, commission, stampTax, minComm, slippage]);
 
   // Auto-run on mount
   useEffect(() => { run(); }, []);
@@ -364,6 +412,14 @@ export default function App() {
               <div style={{width:90}}>
                 <MiniLabel>印花税(万分)</MiniLabel>
                 <Input type="number" value={stampTax} onChange={e=>setStampTax(+e.target.value)} style={{color:"#9ca3af"}} />
+              </div>
+              <div style={{width:90}}>
+                <MiniLabel>最低佣金(元)</MiniLabel>
+                <Input type="number" value={minComm} onChange={e=>setMinComm(+e.target.value)} style={{color:"#9ca3af"}} />
+              </div>
+              <div style={{width:80}}>
+                <MiniLabel>滑点(万分)</MiniLabel>
+                <Input type="number" value={slippage} onChange={e=>setSlippage(+e.target.value)} style={{color:"#9ca3af"}} />
               </div>
             </div>
 
@@ -483,7 +539,7 @@ export default function App() {
 
         {/* ── FOOTER ── */}
         <div style={{marginTop:20,padding:"14px 0",borderTop:"1px solid rgba(255,255,255,.04)",fontSize:10,color:"#333",textAlign:"center",letterSpacing:1}}>
-          数据采集: sina-real-time (Rust WebSocket) · 历史数据: Sina HTTP API · 回测结果仅供参考，不构成投资建议
+          数据采集: sina-real-time (Python + akshare) · 历史数据: 东方财富/新浪 · 回测结果仅供参考，不构成投资建议
         </div>
       </div>
     </div>

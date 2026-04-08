@@ -1,22 +1,9 @@
-[32mINFO[0m:     Started server process [[36m20500[0m]
+[32mINFO[0m:     Started server process [[36m33496[0m]
 [32mINFO[0m:     Waiting for application startup.
 [32mINFO[0m:     Application startup complete.
 [32mINFO[0m:     Uvicorn running on [1mhttp://0.0.0.0:4000[0m (Press CTRL+C to quit)
-2026-04-07 22:13:56,770 [akshare] cache miss, fetching sh000001
-2026-04-07 22:13:56,771 [akshare] cache miss, fetching sh000001
-2026-04-07 22:13:56,772 [akshare] cache miss, fetching sh000001
-2026-04-07 22:13:57,708 [akshare] fetch name failed for sh000001: ''
-2026-04-07 22:13:57,709 [akshare] fetch name failed for sh000001: ''
-2026-04-07 22:13:57,710 [akshare] fetch name failed for sh000001: ''
-2026-04-07 22:14:00,285 [akshare] cache miss, fetching sz399006
-2026-04-07 22:14:00,851 [akshare] fetch name failed for sz399006: ''
-2026-04-07 22:14:02,182 [akshare] cache miss, fetching sz399001
-2026-04-07 22:14:03,085 [akshare] fetch name failed for sz399001: ''
-2026-04-07 22:14:42,821 [akshare] cache miss, fetching sh000300
-2026-04-07 22:14:43,582 [akshare] fetch name failed for sh000300: ''
-2026-04-07 22:14:51,873 [akshare] cache miss, fetching sh000015
-2026-04-07 22:14:52,531 [akshare] fetch name failed for sh000015: ''
-2026-04-07 22:15:06,286 [akshare] cache miss, fetching sh000688
-2026-04-07 22:15:06,884 [akshare] cache miss, fetching sh000688
-2026-04-07 22:15:07,035 [akshare] fetch name failed for sh000688: ''
-2026-04-07 22:15:07,035 [akshare] fetch name failed for sh000688: ''
+2026-04-08 16:34:15,034 [akshare] cache miss, fetching sh000001
+2026-04-08 16:34:15,035 [akshare] cache miss, fetching sh000001
+2026-04-08 16:35:43,099 [akshare] cache miss, fetching sz000581
+2026-04-08 16:35:43,185 [akshare] cache miss, fetching sz000581
+2026-04-08 16:35:54,124 [akshare] cache miss, fetching sz399006

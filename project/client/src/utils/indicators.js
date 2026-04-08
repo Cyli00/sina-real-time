@@ -11,10 +11,14 @@ export const sma = (c, n) => {
 };
 
 export const ema = (c, n) => {
-  const r = [...c];
+  if (c.length < n) return Array(c.length).fill(null);
+  const r = Array(c.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += c[i];
+  r[n - 1] = sum / n; // SMA 种子
   const k = 2 / (n + 1);
-  for (let i = 1; i < c.length; i++) r[i] = c[i] * k + r[i - 1] * (1 - k);
-  return r.map((v, i) => (i >= n - 1 ? v : null));
+  for (let i = n; i < c.length; i++) r[i] = c[i] * k + r[i - 1] * (1 - k);
+  return r;
 };
 
 export function macd(c) {

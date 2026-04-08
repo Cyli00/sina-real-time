@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(chmod +x \"e:/gitProjects/sina-real-time/project/dev.sh\")",
-      "WebFetch(domain:vip.stock.finance.sina.com.cn)"
+      "WebFetch(domain:vip.stock.finance.sina.com.cn)",
+      "Bash(.venv/Scripts/python.exe -c ':*)",
+      "WebFetch(domain:akshare.akfamily.xyz)"
     ]
   }
 }

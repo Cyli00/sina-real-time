@@ -7,6 +7,9 @@ import threading
 from pathlib import Path
 from typing import Optional
 
+import re
+import urllib.request
+
 import akshare as ak
 import pandas as pd
 from fastapi import FastAPI, Query, HTTPException
@@ -29,19 +32,24 @@ _akshare_lock = threading.Lock()  # akshare 内部 V8 引擎不支持并发
 PRESETS_FILE = Path(__file__).parent / "presets.json"
 
 
-def is_index(symbol: str) -> bool:
-    """判断是否为指数代码"""
-    code = symbol[2:]  # sh000001 → 000001
+def _symbol_type(symbol: str) -> str:
+    """判断标的类型: 'index' | 'etf' | 'stock'"""
     prefix = symbol[:2]
-    # 上证指数 000xxx, 深证指数 399xxx
+    code = symbol[2:]
     if prefix == "sh" and code.startswith("000"):
-        return True
+        return "index"
     if prefix == "sz" and code.startswith("399"):
-        return True
-    # 科创50 等
-    if prefix == "sh" and code.startswith("000"):
-        return True
-    return False
+        return "index"
+    # ETF: 上交所 51xxxx/56xxxx/58xxxx, 深交所 15xxxx/16xxxx
+    if prefix == "sh" and (code.startswith("51") or code.startswith("56") or code.startswith("58")):
+        return "etf"
+    if prefix == "sz" and (code.startswith("15") or code.startswith("16")):
+        return "etf"
+    return "stock"
+
+
+def is_index(symbol: str) -> bool:
+    return _symbol_type(symbol) == "index"
 
 
 def fetch_kline_cached(symbol: str) -> list[dict]:
@@ -63,60 +71,77 @@ def fetch_kline_cached(symbol: str) -> list[dict]:
             data = _fetch_kline(symbol)
         except Exception as e:
             log.error(f"[akshare] fetch failed for {symbol}: {e}")
-            data = []
+            return []  # 异常时不缓存，避免空数据占位 10 分钟
 
     CACHE[symbol] = (data, now)
     return data
 
 
+def _df_to_records(df, date_col="date") -> list[dict]:
+    """DataFrame 转标准记录列表"""
+    records = []
+    for _, row in df.iterrows():
+        records.append({
+            "day": str(row[date_col])[:10],
+            "open": round(float(row["open"]), 2),
+            "high": round(float(row["high"]), 2),
+            "low": round(float(row["low"]), 2),
+            "close": round(float(row["close"]), 2),
+            "volume": float(row["volume"]),
+        })
+    return records
+
+
 def _fetch_kline(symbol: str) -> list[dict]:
     """实际拉取逻辑"""
-    prefix = symbol[:2]  # sh / sz
-    code = symbol[2:]    # 000001
+    stype = _symbol_type(symbol)
 
-    if is_index(symbol):
-        # 指数用 stock_zh_index_daily（快速，英文列名）
+    if stype == "index":
         df = ak.stock_zh_index_daily(symbol=symbol)
-        # 列: date, open, high, low, close, volume
-        records = []
-        for _, row in df.iterrows():
-            records.append({
-                "day": str(row["date"])[:10],
-                "open": round(float(row["open"]), 2),
-                "high": round(float(row["high"]), 2),
-                "low": round(float(row["low"]), 2),
-                "close": round(float(row["close"]), 2),
-                "volume": float(row["volume"]),
-            })
-        return records
+        return _df_to_records(df)
+    elif stype == "etf":
+        df = ak.fund_etf_hist_sina(symbol=symbol)
+        return _df_to_records(df)
     else:
-        # 个股用 stock_zh_a_hist（前复权）
-        df = ak.stock_zh_a_hist(symbol=code, period="daily", adjust="qfq")
-        # 中文列名: 日期, 股票代码, 开盘, 收盘, 最高, 最低, 成交量, ...
-        records = []
-        for _, row in df.iterrows():
-            records.append({
-                "day": str(row["日期"])[:10],
-                "open": round(float(row["开盘"]), 2),
-                "high": round(float(row["最高"]), 2),
-                "low": round(float(row["最低"]), 2),
-                "close": round(float(row["收盘"]), 2),
-                "volume": float(row["成交量"]),
-            })
-        return records
+        df = ak.stock_zh_a_daily(symbol=symbol, adjust="qfq")
+        return _df_to_records(df)
+
+
+def _sina_name(symbol: str) -> Optional[str]:
+    """通过新浪实时行情接口获取名称（轻量、无需 akshare）"""
+    try:
+        url = f"https://hq.sinajs.cn/list={symbol}"
+        req = urllib.request.Request(url, headers={"Referer": "https://finance.sina.com.cn"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            text = resp.read().decode("gb18030")
+        m = re.search(r'"([^"]*)"', text)
+        if m:
+            parts = m.group(1).split(",")
+            if parts and parts[0]:
+                return parts[0]
+    except Exception:
+        pass
+    return None
 
 
 def fetch_name(symbol: str) -> str:
-    """获取股票/指数名称"""
+    """获取股票/指数名称，优先新浪接口，fallback akshare"""
+    # 1. 新浪实时行情（最轻量）
+    name = _sina_name(symbol)
+    if name:
+        return name
+    # 2. akshare fallback
     try:
         if is_index(symbol):
-            # 从 stock_zh_index_spot_em 获取指数名称
-            df = ak.stock_zh_index_spot_em(symbol="")
-            row = df[df["代码"] == symbol[2:]]
-            if not row.empty:
-                return str(row.iloc[0]["名称"])
+            for cat in ("上证系列指数", "深证系列指数", "沪深重要指数"):
+                try:
+                    df = ak.stock_zh_index_spot_em(symbol=cat)
+                    row = df[df["代码"] == symbol[2:]]
+                    if not row.empty:
+                        return str(row.iloc[0]["名称"])
+                except Exception:
+                    continue
         else:
-            # 从实时行情获取个股名称
             df = ak.stock_zh_a_spot_em()
             row = df[df["代码"] == symbol[2:]]
             if not row.empty:
@@ -131,7 +156,9 @@ NAME_CACHE: dict[str, str] = {}
 
 
 def get_name_cached(symbol: str) -> str:
-    if symbol not in NAME_CACHE:
+    cached = NAME_CACHE.get(symbol)
+    # 如果缓存的是代码本身（之前获取失败），重试一次
+    if cached is None or cached == symbol:
         NAME_CACHE[symbol] = fetch_name(symbol)
     return NAME_CACHE[symbol]
 
