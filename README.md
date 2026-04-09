@@ -14,22 +14,35 @@ project/
 │           ├── ma.js            均线策略 (5/10/20/30/60日)
 │           └── macd.js          MACD 金叉死叉策略
 ├── server-py/       FastAPI 后端 (port 4000)
-│   ├── app.py                   API 服务 + akshare 数据拉取
-│   └── presets.json             用户收藏标的持久化
-└── dev.ps1          一键启动脚本 (PowerShell)
+│   ├── app.py                   API 服务 + JWT 认证 + akshare 数据拉取
+│   └── db.py                    SQLite 用户管理 + per-user presets
+├── dev.ps1          本地开发一键启动 (PowerShell)
+├── deploy.sh        裸机 Debian 部署脚本
+├── Dockerfile       多阶段构建镜像
+├── docker-compose.yml  Docker Compose + Caddy 反代
+├── Caddyfile        Caddy 反向代理配置（自动 HTTPS）
+└── .env.example     环境变量模板
 ```
 
-**数据流**: 前端 → Vite proxy → FastAPI → akshare → 东财/新浪/网易
+**数据流**: 前端 → Vite proxy / Caddy → FastAPI → akshare → 东财（fallback 新浪）
 
 ## 数据源
 
-| 标的类型 | akshare 接口 | 数据源 |
-|---------|-------------|-------|
-| 个股 | `stock_zh_a_daily(adjust="qfq")` | 新浪/网易 |
-| 指数 | `stock_zh_index_daily` | 新浪 |
-| ETF | `fund_etf_hist_sina` | 新浪 |
+| 标的类型 | akshare 接口（东财优先） | fallback |
+|---------|------------------------|----------|
+| 个股 | `stock_zh_a_hist(adjust="qfq")` | `stock_zh_a_daily` (新浪) |
+| 指数 | `index_zh_a_hist` | `stock_zh_index_daily` (新浪) |
+| ETF | `fund_etf_hist_em(adjust="qfq")` | `fund_etf_hist_sina` (新浪) |
 
 名称查询优先使用新浪实时行情接口 (`hq.sinajs.cn`)，fallback akshare。
+
+## 用户管理
+
+- 管理员通过环境变量 `ADMIN_USER` / `ADMIN_PASS` 配置
+- 管理员可在 UI 中添加/删除用户、重置密码
+- 每个用户拥有独立的标的监控列表（首次创建自动生成默认 7 个指数）
+- 用户可自行修改密码
+- JWT 认证，改密后旧 token 自动失效
 
 ## 回测策略
 
@@ -45,13 +58,14 @@ project/
 - 涨跌停检测 (科创板 20%、创业板 20%、北交所 30%、主板 10%)
 - 指数 / ETF 免佣金印花税，无整手约束
 
-## 快速启动
+## 快速启动（本地开发）
 
 ```powershell
 # 前提: Node.js, Python 3.12+, uv
 cd project
 .\dev.ps1
 # 访问 http://localhost:3000
+# 默认管理员: admin / admin123
 ```
 
 手动启动:
@@ -66,12 +80,73 @@ cd project/client
 npm install && npm run dev    # http://localhost:3000
 ```
 
+## 部署（远程服务器）
+
+### Docker Compose（推荐）
+
+```bash
+cd project
+cp .env.example .env
+# 编辑 .env: 设置 ADMIN_PASS, JWT_SECRET, ALLOWED_ORIGINS
+# 编辑 Caddyfile: 替换 your-domain.com 为实际域名
+
+docker compose up -d
+```
+
+Caddy 自动签发 HTTPS 证书，前端静态文件由后端直接托管。
+
+### 裸机 Debian
+
+```bash
+cd project
+sudo ./deploy.sh
+
+# 部署后必须修改:
+sudo vim /etc/backtest.env     # ADMIN_PASS, 域名
+sudo vim /etc/caddy/Caddyfile  # 域名
+sudo systemctl restart backtest caddy
+```
+
+服务管理:
+- `systemctl status backtest` — 后端状态
+- `systemctl status caddy` — 反代状态
+- 日志: `journalctl -u backtest -f`
+
+## 部署架构
+
+```
+Internet → Caddy (:443 HTTPS) → FastAPI (:4000 localhost)
+                                  ├── /api/*    后端 API
+                                  └── /*        前端静态文件 (dist/)
+```
+
+- 后端绑定 `127.0.0.1:4000`，仅本机可访问
+- Caddy 反代对外暴露，自动 HTTPS
+- SQLite 数据库持久化（Docker 用 volume，裸机在 `/opt/backtest/data/`）
+
+## 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `ADMIN_USER` | 管理员用户名 | `admin` |
+| `ADMIN_PASS` | 管理员密码 | `admin123`（生产必须修改） |
+| `JWT_SECRET` | JWT 签名密钥 | 随机生成（重启失效，生产应固定） |
+| `ALLOWED_ORIGINS` | CORS 允许来源，逗号分隔 | `*` |
+| `DB_PATH` | SQLite 数据库路径 | `server-py/backtest.db` |
+| `DIST_DIR` | 前端构建产物路径 | `../client/dist` |
+
 ## API
 
-| 端点 | 说明 |
-|------|------|
-| `GET /api/kline?symbol=sh000001&start=2020-01-01&end=2026-04-08` | K 线数据 |
-| `GET /api/range?symbol=sh000001` | 数据范围探测 + 名称 |
-| `GET /api/presets` | 获取收藏标的列表 |
-| `POST /api/presets` | 保存收藏标的列表 |
-| `GET /api/health` | 健康检查 |
+| 端点 | 认证 | 说明 |
+|------|------|------|
+| `POST /api/login` | 无 | 登录获取 token |
+| `POST /api/change-password` | 用户 | 修改密码（返回新 token） |
+| `GET /api/admin/users` | 管理员 | 用户列表 |
+| `POST /api/admin/users` | 管理员 | 添加用户 |
+| `POST /api/admin/users/{id}/reset-password` | 管理员 | 重置密码 |
+| `DELETE /api/admin/users/{id}` | 管理员 | 删除用户 |
+| `GET /api/kline?symbol=sh000001&start=...&end=...` | 用户 | K 线数据 |
+| `GET /api/range?symbol=sh000001` | 用户 | 数据范围探测 + 名称 |
+| `GET /api/presets` | 用户 | 获取收藏标的列表（per-user） |
+| `POST /api/presets` | 用户 | 保存收藏标的列表（per-user） |
+| `GET /api/health` | 无 | 健康检查 |

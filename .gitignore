@@ -34,6 +34,12 @@ __pycache__/
 *.pyo
 *.pyd
 
+# SQLite database
+*.db
+
+# Environment secrets
+.env
+
 # IDE/editor cache
 .idea/
 .vscode/

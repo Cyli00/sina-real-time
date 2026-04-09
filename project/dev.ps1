@@ -1,6 +1,11 @@
 # Start backend (Python) + frontend, visit http://localhost:3000
 $root = $PSScriptRoot
 
+# Admin credentials (change before first run, or set env vars externally)
+if (-not $env:ADMIN_USER) { $env:ADMIN_USER = "admin" }
+if (-not $env:ADMIN_PASS) { $env:ADMIN_PASS = "admin123" }
+Write-Host "== Admin: $env:ADMIN_USER ==" -ForegroundColor Magenta
+
 # Kill previous backend if port 4000 is occupied
 $existing = Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue
 if ($existing) {

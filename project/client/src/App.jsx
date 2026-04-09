@@ -2,9 +2,22 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 /* ══════════════════════════════════════════
+   Auth helpers
+   ══════════════════════════════════════════ */
+
+let _token = localStorage.getItem("token") || "";
+function setAuthToken(t) { _token = t; if (t) localStorage.setItem("token", t); else localStorage.removeItem("token"); }
+function authHeaders() { return _token ? { "Authorization": `Bearer ${_token}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" }; }
+
+let _onUnauth = null; // App 组件设置的 401 回调
+function handleResponse(r) {
+  if (r.status === 401) { _onUnauth?.(); return null; }
+  if (!r.ok) throw new Error(r.status);
+  return r;
+}
+
+/* ══════════════════════════════════════════
    API Layer
-   - 优先通过 Python 后端 /api/*
-   - 后端不可用时 fallback 到直连新浪 + demo
    ══════════════════════════════════════════ */
 
 async function apiFetchKLine(symbol, start, end) {
@@ -12,17 +25,17 @@ async function apiFetchKLine(symbol, start, end) {
   if (start) p.set("start", start);
   if (end) p.set("end", end);
   try {
-    const r = await fetch(`/api/kline?${p}`);
-    if (!r.ok) throw new Error(r.status);
-    return await r.json();                       // { symbol, name, data[], source, earliest_date, latest_date }
+    const r = handleResponse(await fetch(`/api/kline?${p}`, { headers: authHeaders() }));
+    if (!r) return null;
+    return await r.json();
   } catch { return null; }
 }
 
 async function apiFetchRange(symbol) {
   try {
-    const r = await fetch(`/api/range?symbol=${symbol}`);
-    if (!r.ok) throw new Error(r.status);
-    return await r.json();                       // { earliest_date, latest_date, kline_points, csv_available }
+    const r = handleResponse(await fetch(`/api/range?symbol=${symbol}`, { headers: authHeaders() }));
+    if (!r) return null;
+    return await r.json();
   } catch { return null; }
 }
 
@@ -73,12 +86,6 @@ const STRATS = {
    Backtester
    ══════════════════════════════════════════ */
 
-// execMode: "close" | "nextOpen"
-// commRate: 佣金费率（如 0.0005 = 万5），买卖双边收取
-// stampRate: 印花税费率（如 0.001 = 千1），仅卖出收取
-// minComm: 最低佣金（元），单笔不足按此数收取
-// slipBps: 滑点（万分之N），买入加价、卖出减价
-// limitRate: 涨跌停幅度（0.1=10%），0 表示不检查（指数）
 function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRate=0, minComm=0, slipBps=0, limitRate=0, isIndex=false) {
   const C=data.map(d=>+d.close), H=data.map(d=>+d.high), L=data.map(d=>+d.low), O=data.map(d=>+d.open);
   const sig=stratFn(C,H,L);
@@ -87,7 +94,6 @@ function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRat
   let lastBuyBar=-2;
   const eq=[];
 
-  // 涨跌停判断（前复权数据在除权日可能误判，属已知局限）
   function isLimitUp(bar, price) {
     if (bar === 0 || limitRate <= 0) return false;
     return price >= Math.round(C[bar-1] * (1 + limitRate) * 100) / 100;
@@ -104,8 +110,8 @@ function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRat
     if (shares > 0 || cash <= 0 || isLimitUp(bar, rawPrice)) return;
     const price = slip(rawPrice, true);
     let n = isIndex
-      ? Math.floor(cash / (price * (1 + commRate)))        // 指数：不做整手约束
-      : Math.floor(cash / (price * (1 + commRate)) / 100) * 100;  // 个股：100股整手
+      ? Math.floor(cash / (price * (1 + commRate)))
+      : Math.floor(cash / (price * (1 + commRate)) / 100) * 100;
     if (n <= 0) return;
     let cost = n * price;
     let fee = Math.max(cost * commRate, minComm);
@@ -122,7 +128,7 @@ function backtest(data, stratFn, capital, execMode="close", commRate=0, stampRat
     if (isLimitDown(bar, rawPrice)) return;
     const price = slip(rawPrice, false);
     const gross = shares * price;
-    const fee = Math.min(Math.max(gross * commRate, minComm) + gross * stampRate, gross);  // 手续费不超过卖出所得
+    const fee = Math.min(Math.max(gross * commRate, minComm) + gross * stampRate, gross);
     const net = gross - fee;
     completedTrades++;
     if (net > lastBuyCost) wins++;
@@ -163,7 +169,6 @@ const DEFAULT_PRESETS = [
 
 const fmt = n => Number(n).toLocaleString();
 
-// 标准化股票代码：支持 "000001.SZ" / "600519.SH" / "830799.BJ" / 纯数字
 function normalizeSymbol(input) {
   const s = input.trim().toLowerCase();
   if (/^(sh|sz|bj)\d{6}$/.test(s)) return s;
@@ -172,20 +177,217 @@ function normalizeSymbol(input) {
   const pureDigit = s.match(/^(\d{6})$/);
   if (pureDigit) {
     const code = pureDigit[1];
-    if (code[0] === '6' || code[0] === '5') return 'sh' + code;  // 6xxxxx 个股, 5xxxxx ETF
-    if (code[0] === '8' || code[0] === '4') return 'bj' + code;  // 北交所
+    if (code[0] === '6' || code[0] === '5') return 'sh' + code;
+    if (code[0] === '8' || code[0] === '4') return 'bj' + code;
     return 'sz' + code;
   }
   return s;
 }
 
-// 根据股票代码判断涨跌停幅度
 function getLimitRate(symbol) {
   const code = symbol.slice(2);
-  if (code.startsWith("688")) return 0.2;   // 科创板 20%
-  if (code.startsWith("300")) return 0.2;   // 创业板 20%
-  if (code[0] === "8" || code[0] === "4") return 0.3;  // 北交所 30%
-  return 0.1;  // 主板 10%
+  if (code.startsWith("688")) return 0.2;
+  if (code.startsWith("300")) return 0.2;
+  if (code[0] === "8" || code[0] === "4") return 0.3;
+  return 0.1;
+}
+
+/* ══════════════════════════════════════════
+   Login Screen
+   ══════════════════════════════════════════ */
+
+function LoginScreen({ onLogin }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(""); setLoading(true);
+    try {
+      const r = await fetch("/api/login", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => null);
+        setError(d?.detail || "登录失败"); setLoading(false); return;
+      }
+      const data = await r.json();
+      onLogin(data.token, { username: data.username, is_admin: data.is_admin });
+    } catch { setError("无法连接服务器"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <form onSubmit={submit} style={{width:340,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:32}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{width:48,height:48,borderRadius:10,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,color:"#fff",marginBottom:12}}>量</div>
+          <h2 style={{margin:0,fontSize:18,fontWeight:700,color:"#e8e6e3",letterSpacing:1}}>策略回测平台</h2>
+          <p style={{margin:"4px 0 0",fontSize:11,color:"#6b7280",letterSpacing:2}}>STRATEGY BACKTESTING</p>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:11,color:"#6b7280",display:"block",marginBottom:4}}>用户名</label>
+          <input value={username} onChange={e=>setUsername(e.target.value)} autoFocus
+            style={{width:"100%",padding:"10px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+        </div>
+        <div style={{marginBottom:20}}>
+          <label style={{fontSize:11,color:"#6b7280",display:"block",marginBottom:4}}>密码</label>
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)}
+            style={{width:"100%",padding:"10px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+        </div>
+        {error && <div style={{marginBottom:14,fontSize:12,color:"#ef4444",textAlign:"center"}}>{error}</div>}
+        <button type="submit" disabled={loading || !username || !password}
+          style={{width:"100%",padding:12,fontSize:14,fontWeight:700,borderRadius:8,cursor:loading?"wait":"pointer",background:"linear-gradient(90deg,#f97316,#fb923c)",border:"none",color:"#0a0a0f",letterSpacing:2,opacity:(username&&password)?1:.5}}>
+          {loading ? "登录中..." : "登 录"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   Admin Panel
+   ══════════════════════════════════════════ */
+
+function AdminPanel({ onBack }) {
+  const [users, setUsers] = useState([]);
+  const [newUser, setNewUser] = useState("");
+  const [newPass, setNewPass] = useState("");
+  const [msg, setMsg] = useState("");
+
+  const loadUsers = async () => {
+    try {
+      const r = handleResponse(await fetch("/api/admin/users", { headers: authHeaders() }));
+      if (r) setUsers(await r.json());
+    } catch {}
+  };
+
+  useEffect(() => { loadUsers(); }, []);
+
+  const addUser = async (e) => {
+    e.preventDefault();
+    setMsg("");
+    try {
+      const r = await fetch("/api/admin/users", {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ username: newUser, password: newPass }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setMsg(d.detail || "创建失败"); return; }
+      setMsg(`用户 "${d.username}" 创建成功`);
+      setNewUser(""); setNewPass("");
+      loadUsers();
+    } catch { setMsg("请求失败"); }
+  };
+
+  const [resetId, setResetId] = useState(null);
+  const [resetPass, setResetPass] = useState("");
+
+  const resetPassword = async (id) => {
+    if (!resetPass.trim()) return;
+    try {
+      const r = await fetch(`/api/admin/users/${id}/reset-password`, {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ new_password: resetPass }),
+      });
+      const d = await r.json();
+      if (r.ok) { setMsg("密码已重置"); setResetId(null); setResetPass(""); }
+      else setMsg(d.detail || "重置失败");
+    } catch { setMsg("请求失败"); }
+  };
+
+  const deleteUser = async (id, name) => {
+    if (!confirm(`确定删除用户 "${name}"？其监控列表也将被删除。`)) return;
+    try {
+      const r = await fetch(`/api/admin/users/${id}`, { method: "DELETE", headers: authHeaders() });
+      if (r.ok) loadUsers();
+      else { const d = await r.json().catch(()=>null); setMsg(d?.detail || "删除失败"); }
+    } catch { setMsg("请求失败"); }
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",color:"#e8e6e3",fontFamily:"'JetBrains Mono','SF Mono','Fira Code',monospace"}}>
+      <div style={{background:"linear-gradient(90deg,rgba(99,102,241,.12),rgba(249,115,22,.08))",borderBottom:"1px solid rgba(99,102,241,.2)",padding:"20px 28px",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:40,height:40,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#f97316)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#fff"}}>管</div>
+        <div>
+          <h1 style={{margin:0,fontSize:22,fontWeight:700,color:"#818cf8",letterSpacing:1}}>用户管理</h1>
+          <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>USER MANAGEMENT</p>
+        </div>
+        <button onClick={onBack} style={{marginLeft:"auto",fontSize:12,padding:"6px 16px",borderRadius:6,cursor:"pointer",background:"rgba(249,115,22,.15)",border:"1px solid rgba(249,115,22,.3)",color:"#fb923c"}}>返回回测</button>
+      </div>
+
+      <div style={{padding:"20px 28px",maxWidth:700}}>
+        {/* 添加用户 */}
+        <div style={{...panelStyle,marginBottom:20}}>
+          <div style={{fontSize:11,color:"#6b7280",letterSpacing:2,marginBottom:12,textTransform:"uppercase"}}>添加用户 · Add User</div>
+          <form onSubmit={addUser} style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+            <div style={{flex:1}}>
+              <label style={{fontSize:10,color:"#6b7280",display:"block",marginBottom:4}}>用户名</label>
+              <input value={newUser} onChange={e=>setNewUser(e.target.value)}
+                style={{width:"100%",padding:"8px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+            </div>
+            <div style={{flex:1}}>
+              <label style={{fontSize:10,color:"#6b7280",display:"block",marginBottom:4}}>密码</label>
+              <input type="password" value={newPass} onChange={e=>setNewPass(e.target.value)}
+                style={{width:"100%",padding:"8px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+            </div>
+            <button type="submit" disabled={!newUser.trim()||!newPass.trim()}
+              style={{padding:"8px 20px",fontSize:12,borderRadius:6,cursor:"pointer",background:"rgba(34,197,94,.15)",border:"1px solid rgba(34,197,94,.4)",color:"#22c55e",whiteSpace:"nowrap",opacity:(newUser.trim()&&newPass.trim())?1:.5}}>+ 添加</button>
+          </form>
+          {msg && <div style={{marginTop:10,fontSize:12,color:msg.includes("成功")?"#22c55e":"#ef4444"}}>{msg}</div>}
+        </div>
+
+        {/* 用户列表 */}
+        <div style={{...panelStyle,padding:0,overflow:"hidden"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+            <span style={{fontSize:11,color:"#6b7280",letterSpacing:2,textTransform:"uppercase"}}>用户列表 · Users ({users.length})</span>
+          </div>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead><tr style={{borderBottom:"1px solid rgba(255,255,255,.08)"}}>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>ID</th>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>用户名</th>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>角色</th>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>创建时间</th>
+              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>操作</th>
+            </tr></thead>
+            <tbody>{users.map(u => (
+              <tr key={u.id} style={{borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+                <td style={{padding:"10px 14px",color:"#555"}}>{u.id}</td>
+                <td style={{padding:"10px 14px",color:"#e8e6e3",fontWeight:500}}>{u.username}</td>
+                <td style={{padding:"10px 14px"}}>{u.is_admin
+                  ? <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理员</span>
+                  : <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>普通用户</span>
+                }</td>
+                <td style={{padding:"10px 14px",color:"#6b7280",fontSize:11}}>{u.created_at}</td>
+                <td style={{padding:"10px 14px",display:"flex",gap:6,alignItems:"center"}}>
+                  {resetId===u.id ? (
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      <input type="password" placeholder="新密码" value={resetPass} onChange={e=>setResetPass(e.target.value)}
+                        style={{width:100,padding:"4px 8px",fontSize:11,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:4,color:"#e8e6e3",outline:"none"}} />
+                      <button onClick={()=>resetPassword(u.id)} disabled={!resetPass.trim()}
+                        style={{fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.3)",color:"#22c55e"}}>确认</button>
+                      <button onClick={()=>{setResetId(null);setResetPass("");}}
+                        style={{fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>取消</button>
+                    </div>
+                  ) : (
+                    <>
+                      <button onClick={()=>{setResetId(u.id);setResetPass("");}}
+                        style={{fontSize:10,padding:"3px 10px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>重置密码</button>
+                      {!u.is_admin && <button onClick={()=>deleteUser(u.id,u.username)}
+                        style={{fontSize:10,padding:"3px 10px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>删除</button>}
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ══════════════════════════════════════════
@@ -193,18 +395,67 @@ function getLimitRate(symbol) {
    ══════════════════════════════════════════ */
 
 export default function App() {
+  const [token, setToken] = useState(() => localStorage.getItem("token") || "");
+  const [user, setUser] = useState(() => { try { return JSON.parse(localStorage.getItem("user")); } catch { return null; } });
+  const [showAdmin, setShowAdmin] = useState(false);
+
+  const doLogin = (tok, usr) => {
+    setAuthToken(tok);
+    setToken(tok);
+    setUser(usr);
+    localStorage.setItem("user", JSON.stringify(usr));
+  };
+
+  const doLogout = () => {
+    setAuthToken("");
+    setToken("");
+    setUser(null);
+    localStorage.removeItem("user");
+  };
+
+  // 注册 401 回调
+  useEffect(() => { _onUnauth = doLogout; return () => { _onUnauth = null; }; }, []);
+
+  if (!token) return <LoginScreen onLogin={doLogin} />;
+  if (showAdmin && user?.is_admin) return <AdminPanel onBack={() => setShowAdmin(false)} />;
+
+  return <MainApp user={user} onLogout={doLogout} onShowAdmin={() => setShowAdmin(true)} />;
+}
+
+/* ══════════════════════════════════════════
+   Main App (回测界面)
+   ══════════════════════════════════════════ */
+
+function MainApp({ user, onLogout, onShowAdmin }) {
+  const [showChangePwd, setShowChangePwd] = useState(false);
+  const [oldPwd, setOldPwd] = useState("");
+  const [newPwd, setNewPwd] = useState("");
+  const [pwdMsg, setPwdMsg] = useState("");
+
+  const changePassword = async (e) => {
+    e.preventDefault(); setPwdMsg("");
+    try {
+      const r = await fetch("/api/change-password", {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+      });
+      const d = await r.json();
+      if (r.ok) { if (d.token) setAuthToken(d.token); setPwdMsg("密码已修改"); setOldPwd(""); setNewPwd(""); setTimeout(() => setShowChangePwd(false), 1000); }
+      else setPwdMsg(d.detail || "修改失败");
+    } catch { setPwdMsg("请求失败"); }
+  };
+
   const [presets, setPresets] = useState(DEFAULT_PRESETS);
   const [symbol, setSymbol] = useState("sh000001");
   const [custom, setCustom] = useState("");
   const [capital, setCapital] = useState(100);
   const [selStrats, setSelStrats] = useState(Object.keys(STRATS));
 
-  // 加载预设
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch("/api/presets");
-        if (r.ok) { const data = await r.json(); if (data.length) setPresets(data); }
+        const r = handleResponse(await fetch("/api/presets", { headers: authHeaders() }));
+        if (r) { const data = await r.json(); if (data.length) setPresets(data); }
       } catch {}
     })();
   }, []);
@@ -212,7 +463,7 @@ export default function App() {
   const savePresets = async (list) => {
     setPresets(list);
     try {
-      const r = await fetch("/api/presets", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(list) });
+      const r = await fetch("/api/presets", { method: "POST", headers: authHeaders(), body: JSON.stringify(list) });
       if (!r.ok) console.warn("[presets] save failed:", r.status);
     } catch (e) { console.warn("[presets] save error:", e); }
   };
@@ -232,25 +483,23 @@ export default function App() {
     if (symbol === code && presets.length > 1) setSymbol(presets.find(p => p.code !== code)?.code || "sh000001");
   };
 
-  // Date range
   const [startDate, setStartDate] = useState("2015-01-01");
   const [endDate, setEndDate]   = useState(new Date().toISOString().slice(0,10));
-  const [rangeInfo, setRangeInfo] = useState(null);   // { earliest_date, latest_date, ... }
+  const [rangeInfo, setRangeInfo] = useState(null);
 
   const [rawData, setRawData] = useState(null);
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [stockName, setStockName] = useState("上证指数");
   const [dataSource, setDataSource] = useState("");
-  const [execMode, setExecMode] = useState("nextOpen");  // "close" | "nextOpen"
-  const [commission, setCommission] = useState(5);       // 万分之N（万5）
-  const [stampTax, setStampTax] = useState(10);           // 万分之N（千1 = 万10）
-  const [minComm, setMinComm] = useState(5);              // 最低佣金（元）
-  const [slippage, setSlippage] = useState(0);            // 滑点（万分之N）
+  const [execMode, setExecMode] = useState("close");
+  const [commission, setCommission] = useState(5);
+  const [stampTax, setStampTax] = useState(10);
+  const [minComm, setMinComm] = useState(5);
+  const [slippage, setSlippage] = useState(0);
   const [sortCol, setSortCol] = useState("finalValue");
   const [sortAsc, setSortAsc] = useState(false);
 
-  // Probe date range when symbol changes
   const activeSymbol = custom.trim() ? normalizeSymbol(custom) : symbol;
   useEffect(() => {
     let cancelled = false;
@@ -261,7 +510,6 @@ export default function App() {
         setRangeInfo(info);
         const name = info.name || activeSymbol;
         setStockName(name);
-        // 如果 preset 的 label 还是代码，用真实名称回填
         if (name !== activeSymbol) {
           const p = presets.find(p => p.code === activeSymbol && p.label === p.code);
           if (p) savePresets(presets.map(x => x.code === activeSymbol ? { ...x, label: name } : x));
@@ -280,7 +528,6 @@ export default function App() {
     const sym = activeSymbol;
     let data = null, src = "demo", name = stockName;
 
-    // 1. 尝试 Rust 后端
     const apiResp = await apiFetchKLine(sym, startDate, endDate);
     if (apiResp && apiResp.data?.length > 20) {
       data = apiResp.data;
@@ -288,19 +535,16 @@ export default function App() {
       name = apiResp.name;
     }
 
-    // 2. Fallback 直连新浪
     if (!data) {
       const sina = await fallbackSina(sym);
       if (sina && sina.length > 20) {
         data = sina.map(d => ({...d, day: d.day.slice(0,10)}));
-        // 手动按日期裁剪
         if (startDate) data = data.filter(d => d.day >= startDate);
         if (endDate) data = data.filter(d => d.day <= endDate);
         src = "sina_direct";
       }
     }
 
-    // 3. Fallback demo
     if (!data || data.length < 20) {
       const demo = generateDemo(sym, startDate, endDate);
       data = demo.data; name = demo.name; src = "demo";
@@ -327,7 +571,6 @@ export default function App() {
     setLoading(false);
   }, [activeSymbol, startDate, endDate, capital, selStrats, stockName, execMode, commission, stampTax, minComm, slippage]);
 
-  // Auto-run on mount
   useEffect(() => { run(); }, []);
 
   const chartData = useMemo(() => {
@@ -361,14 +604,41 @@ export default function App() {
     <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",color:"#e8e6e3",fontFamily:"'JetBrains Mono','SF Mono','Fira Code',monospace"}}>
 
       {/* ── HEADER ── */}
-      <div style={{background:"linear-gradient(90deg,rgba(249,115,22,.12),rgba(99,102,241,.08))",borderBottom:"1px solid rgba(249,115,22,.2)",padding:"20px 28px",display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:40,height:40,borderRadius:8,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#fff"}}>量</div>
-        <div>
+      <div style={{background:"linear-gradient(90deg,rgba(249,115,22,.12),rgba(99,102,241,.08))",borderBottom:"1px solid rgba(249,115,22,.2)",padding:"14px 28px",display:"flex",alignItems:"center",gap:14}}>
+        <div style={{width:40,height:40,borderRadius:8,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#fff",flexShrink:0}}>量</div>
+        <div style={{flexShrink:0}}>
           <h1 style={{margin:0,fontSize:22,fontWeight:700,letterSpacing:1,background:"linear-gradient(90deg,#f97316,#fb923c,#fbbf24)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>策略回测平台</h1>
           <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>STRATEGY BACKTESTING</p>
         </div>
-        {dataSource && <span style={{marginLeft:"auto",fontSize:10,padding:"3px 10px",background:srcBadge.bg,color:srcBadge.c,borderRadius:4,border:`1px solid ${srcBadge.b}`}}>{srcBadge.t}</span>}
+        <div style={{marginLeft:"auto",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+          {dataSource && <span style={{fontSize:10,padding:"3px 10px",background:srcBadge.bg,color:srcBadge.c,borderRadius:4,border:`1px solid ${srcBadge.b}`}}>{srcBadge.t}</span>}
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:11,color:"#6b7280"}}>{user?.username}</span>
+            <button onClick={()=>{setShowChangePwd(!showChangePwd);setPwdMsg("");setOldPwd("");setNewPwd("");}} style={{fontSize:10,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>改密</button>
+            {user?.is_admin && <button onClick={onShowAdmin} style={{fontSize:10,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理</button>}
+            <button onClick={onLogout} style={{fontSize:10,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>登出</button>
+          </div>
+        </div>
       </div>
+      {showChangePwd && (
+        <div style={{background:"rgba(0,0,0,.4)",borderBottom:"1px solid rgba(251,191,36,.15)",padding:"12px 28px"}}>
+          <form onSubmit={changePassword} style={{display:"flex",gap:10,alignItems:"flex-end",maxWidth:500}}>
+            <div style={{flex:1}}>
+              <label style={{fontSize:10,color:"#6b7280",display:"block",marginBottom:3}}>旧密码</label>
+              <input type="password" value={oldPwd} onChange={e=>setOldPwd(e.target.value)}
+                style={{width:"100%",padding:"6px 10px",fontSize:12,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:4,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+            </div>
+            <div style={{flex:1}}>
+              <label style={{fontSize:10,color:"#6b7280",display:"block",marginBottom:3}}>新密码</label>
+              <input type="password" value={newPwd} onChange={e=>setNewPwd(e.target.value)}
+                style={{width:"100%",padding:"6px 10px",fontSize:12,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:4,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+            </div>
+            <button type="submit" disabled={!oldPwd||!newPwd}
+              style={{padding:"6px 14px",fontSize:11,borderRadius:4,cursor:"pointer",background:"rgba(34,197,94,.15)",border:"1px solid rgba(34,197,94,.4)",color:"#22c55e",whiteSpace:"nowrap",opacity:(oldPwd&&newPwd)?1:.5}}>确认修改</button>
+            {pwdMsg && <span style={{fontSize:11,color:pwdMsg.includes("已修改")?"#22c55e":"#ef4444",whiteSpace:"nowrap"}}>{pwdMsg}</span>}
+          </form>
+        </div>
+      )}
 
       <div style={{padding:"20px 28px"}}>
         {/* ── CONTROLS: 2-column ── */}

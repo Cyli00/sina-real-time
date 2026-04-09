@@ -1,0 +1,7 @@
+client/node_modules
+client/dist
+server-py/.venv
+server-py/__pycache__
+server-py/*.db
+*.log
+.git

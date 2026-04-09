@@ -1,0 +1,5 @@
+# 替换为你的域名，Caddy 自动签发 HTTPS 证书
+# 如果没有域名，用 :80 替代（仅 HTTP）
+your-domain.com {
+    reverse_proxy backend:4000
+}
