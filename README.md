@@ -38,7 +38,8 @@ project/
 
 ## 用户管理
 
-- 管理员通过环境变量 `ADMIN_USER` / `ADMIN_PASS` 配置
+- 首次部署默认管理员: `admin` / `admin123`
+- **首次登录强制修改管理员用户名和密码**，设置完成后默认凭证失效
 - 管理员可在 UI 中添加/删除用户、重置密码
 - 每个用户拥有独立的标的监控列表（首次创建自动生成默认 7 个指数）
 - 用户可自行修改密码
@@ -65,7 +66,7 @@ project/
 cd project
 .\dev.ps1
 # 访问 http://localhost:3000
-# 默认管理员: admin / admin123
+# 默认管理员: admin / admin123（首次登录强制修改）
 ```
 
 手动启动:
@@ -87,7 +88,7 @@ npm install && npm run dev    # http://localhost:3000
 ```bash
 cd project
 cp .env.example .env
-# 编辑 .env: 设置 ADMIN_PASS, JWT_SECRET, ALLOWED_ORIGINS
+# 编辑 .env: 设置 JWT_SECRET, ALLOWED_ORIGINS
 # 编辑 Caddyfile: 替换 your-domain.com 为实际域名
 
 docker compose up -d
@@ -102,7 +103,7 @@ cd project
 sudo ./deploy.sh
 
 # 部署后必须修改:
-sudo vim /etc/backtest.env     # ADMIN_PASS, 域名
+sudo vim /etc/backtest.env     # JWT_SECRET, 域名
 sudo vim /etc/caddy/Caddyfile  # 域名
 sudo systemctl restart backtest caddy
 ```
@@ -128,8 +129,6 @@ Internet → Caddy (:443 HTTPS) → FastAPI (:4000 localhost)
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `ADMIN_USER` | 管理员用户名 | `admin` |
-| `ADMIN_PASS` | 管理员密码 | `admin123`（生产必须修改） |
 | `JWT_SECRET` | JWT 签名密钥 | 随机生成（重启失效，生产应固定） |
 | `ALLOWED_ORIGINS` | CORS 允许来源，逗号分隔 | `*` |
 | `DB_PATH` | SQLite 数据库路径 | `server-py/backtest.db` |
@@ -139,7 +138,8 @@ Internet → Caddy (:443 HTTPS) → FastAPI (:4000 localhost)
 
 | 端点 | 认证 | 说明 |
 |------|------|------|
-| `POST /api/login` | 无 | 登录获取 token |
+| `POST /api/login` | 无 | 登录获取 token（含 `must_setup` 标志） |
+| `POST /api/setup` | 用户 | 首次设置管理员用户名+密码 |
 | `POST /api/change-password` | 用户 | 修改密码（返回新 token） |
 | `GET /api/admin/users` | 管理员 | 用户列表 |
 | `POST /api/admin/users` | 管理员 | 添加用户 |

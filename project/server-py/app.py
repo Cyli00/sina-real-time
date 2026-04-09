@@ -289,12 +289,16 @@ def login(req: LoginReq, request: Request):
 
     conn = get_db()
     try:
-        row = conn.execute("SELECT id, username, password_hash, is_admin, pw_version FROM users WHERE username = ?",
+        row = conn.execute("SELECT id, username, password_hash, is_admin, pw_version, must_setup FROM users WHERE username = ?",
                            (req.username,)).fetchone()
         if not row or not verify_password(req.password, row["password_hash"]):
             raise HTTPException(401, "用户名或密码错误")
         token = create_token(row["id"], row["username"], bool(row["is_admin"]), row["pw_version"])
-        return {"token": token, "username": row["username"], "is_admin": bool(row["is_admin"])}
+        return {
+            "token": token, "username": row["username"],
+            "is_admin": bool(row["is_admin"]),
+            "must_setup": bool(row["must_setup"]),
+        }
     finally:
         conn.close()
 
@@ -323,6 +327,40 @@ def change_password(req: ChangePasswordReq, user: dict = Depends(get_current_use
                          (user["user_id"],)).fetchone()
         new_token = create_token(r["id"], r["username"], bool(r["is_admin"]), r["pw_version"])
         return {"ok": True, "token": new_token}
+    finally:
+        conn.close()
+
+
+# ── 首次设置（强制改管理员用户名+密码） ──
+
+class SetupReq(BaseModel):
+    new_username: str
+    new_password: str
+
+
+@app.post("/api/setup")
+def initial_setup(req: SetupReq, user: dict = Depends(get_current_user)):
+    if not req.new_username.strip() or not req.new_password.strip():
+        raise HTTPException(400, "用户名和密码不能为空")
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT must_setup FROM users WHERE id = ?", (user["user_id"],)).fetchone()
+        if not row or not row["must_setup"]:
+            raise HTTPException(400, "无需初始设置")
+        # 检查新用户名是否冲突
+        new_name = req.new_username.strip()
+        existing = conn.execute("SELECT id FROM users WHERE username = ? AND id != ?",
+                                (new_name, user["user_id"])).fetchone()
+        if existing:
+            raise HTTPException(409, "用户名已存在")
+        conn.execute(
+            "UPDATE users SET username = ?, password_hash = ?, must_setup = 0, pw_version = pw_version + 1 WHERE id = ?",
+            (new_name, hash_password(req.new_password), user["user_id"]))
+        conn.commit()
+        r = conn.execute("SELECT id, username, is_admin, pw_version FROM users WHERE id = ?",
+                         (user["user_id"],)).fetchone()
+        new_token = create_token(r["id"], r["username"], bool(r["is_admin"]), r["pw_version"])
+        return {"ok": True, "token": new_token, "username": r["username"]}
     finally:
         conn.close()
 

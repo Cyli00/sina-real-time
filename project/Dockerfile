@@ -28,8 +28,6 @@ COPY --from=frontend /build/dist /app/client/dist
 RUN mkdir -p /app/data
 
 # 默认环境变量
-ENV ADMIN_USER=admin
-ENV ADMIN_PASS=changeme
 ENV JWT_SECRET=""
 ENV ALLOWED_ORIGINS=""
 ENV DB_PATH=/app/data/backtest.db

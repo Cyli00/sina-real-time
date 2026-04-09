@@ -215,7 +215,7 @@ function LoginScreen({ onLogin }) {
         setError(d?.detail || "登录失败"); setLoading(false); return;
       }
       const data = await r.json();
-      onLogin(data.token, { username: data.username, is_admin: data.is_admin });
+      onLogin(data.token, { username: data.username, is_admin: data.is_admin, must_setup: data.must_setup });
     } catch { setError("无法连接服务器"); }
     setLoading(false);
   };
@@ -242,6 +242,67 @@ function LoginScreen({ onLogin }) {
         <button type="submit" disabled={loading || !username || !password}
           style={{width:"100%",padding:12,fontSize:14,fontWeight:700,borderRadius:8,cursor:loading?"wait":"pointer",background:"linear-gradient(90deg,#f97316,#fb923c)",border:"none",color:"#0a0a0f",letterSpacing:2,opacity:(username&&password)?1:.5}}>
           {loading ? "登录中..." : "登 录"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════
+   Setup Screen (首次登录强制设置)
+   ══════════════════════════════════════════ */
+
+function SetupScreen({ onComplete }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault(); setError("");
+    if (password !== confirm) { setError("两次密码不一致"); return; }
+    if (password.length < 6) { setError("密码至少 6 位"); return; }
+    setLoading(true);
+    try {
+      const r = await fetch("/api/setup", {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ new_username: username, new_password: password }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setError(d.detail || "设置失败"); setLoading(false); return; }
+      onComplete(d.token, { username: d.username, is_admin: true, must_setup: false });
+    } catch { setError("无法连接服务器"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <form onSubmit={submit} style={{width:380,background:"rgba(255,255,255,.03)",border:"1px solid rgba(99,102,241,.25)",borderRadius:12,padding:32}}>
+        <div style={{textAlign:"center",marginBottom:24}}>
+          <div style={{width:48,height:48,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#f97316)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,color:"#fff",marginBottom:12}}>设</div>
+          <h2 style={{margin:0,fontSize:18,fontWeight:700,color:"#818cf8",letterSpacing:1}}>初始设置</h2>
+          <p style={{margin:"8px 0 0",fontSize:11,color:"#9ca3af",lineHeight:1.6}}>首次使用，请设置管理员用户名和密码<br/>设置完成后默认账户将失效</p>
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:11,color:"#6b7280",display:"block",marginBottom:4}}>新管理员用户名</label>
+          <input value={username} onChange={e=>setUsername(e.target.value)} autoFocus placeholder="请勿使用 admin"
+            style={{width:"100%",padding:"10px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+        </div>
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:11,color:"#6b7280",display:"block",marginBottom:4}}>新密码</label>
+          <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="至少 6 位"
+            style={{width:"100%",padding:"10px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+        </div>
+        <div style={{marginBottom:20}}>
+          <label style={{fontSize:11,color:"#6b7280",display:"block",marginBottom:4}}>确认密码</label>
+          <input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)}
+            style={{width:"100%",padding:"10px 12px",fontSize:13,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:6,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+        </div>
+        {error && <div style={{marginBottom:14,fontSize:12,color:"#ef4444",textAlign:"center"}}>{error}</div>}
+        <button type="submit" disabled={loading || !username.trim() || !password || !confirm}
+          style={{width:"100%",padding:12,fontSize:14,fontWeight:700,borderRadius:8,cursor:loading?"wait":"pointer",background:"linear-gradient(90deg,#6366f1,#818cf8)",border:"none",color:"#fff",letterSpacing:2,opacity:(username.trim()&&password&&confirm)?1:.5}}>
+          {loading ? "设置中..." : "完成设置"}
         </button>
       </form>
     </div>
@@ -417,6 +478,7 @@ export default function App() {
   useEffect(() => { _onUnauth = doLogout; return () => { _onUnauth = null; }; }, []);
 
   if (!token) return <LoginScreen onLogin={doLogin} />;
+  if (user?.must_setup) return <SetupScreen onComplete={doLogin} />;
   if (showAdmin && user?.is_admin) return <AdminPanel onBack={() => setShowAdmin(false)} />;
 
   return <MainApp user={user} onLogout={doLogout} onShowAdmin={() => setShowAdmin(true)} />;

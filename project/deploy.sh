@@ -13,7 +13,13 @@ ENV_FILE="/etc/backtest.env"
 
 echo "=== 1. 安装系统依赖 ==="
 apt-get update
-apt-get install -y curl git nodejs npm python3 python3-venv caddy
+apt-get install -y curl git python3 python3-venv caddy ca-certificates gnupg
+
+# 安装 Node.js 20.x（Debian 默认源版本过低）
+if ! node --version 2>/dev/null | grep -q "^v2[0-9]"; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
+fi
 
 # 安装 uv
 if ! command -v uv &>/dev/null; then
@@ -44,14 +50,13 @@ echo "=== 6. 创建环境变量文件 ==="
 if [ ! -f "$ENV_FILE" ]; then
     JWT_SECRET=$(openssl rand -hex 32)
     cat > "$ENV_FILE" << EOF
-ADMIN_USER=admin
-ADMIN_PASS=changeme_immediately
 JWT_SECRET=$JWT_SECRET
 ALLOWED_ORIGINS=https://your-domain.com
 DB_PATH=$APP_DIR/data/backtest.db
 EOF
     chmod 600 "$ENV_FILE"
-    echo "!! 请修改 $ENV_FILE 中的 ADMIN_PASS 和域名 !!"
+    echo "!! 请修改 $ENV_FILE 中的域名 !!"
+    echo "!! 默认管理员: admin / admin123（首次登录强制修改）!!"
 fi
 
 mkdir -p "$APP_DIR/data"
@@ -97,6 +102,6 @@ echo "反向代理: systemctl status caddy"
 echo "环境配置: $ENV_FILE"
 echo ""
 echo "!! 必须操作 !!"
-echo "1. 修改 $ENV_FILE 中的 ADMIN_PASS"
-echo "2. 修改 /etc/caddy/Caddyfile 中的域名"
-echo "3. systemctl restart backtest && systemctl restart caddy"
+echo "1. 修改 /etc/caddy/Caddyfile 中的域名"
+echo "2. systemctl restart backtest && systemctl restart caddy"
+echo "3. 首次登录默认管理员 admin / admin123，系统强制修改用户名和密码"

@@ -56,6 +56,8 @@ def _ensure_columns(conn: sqlite3.Connection):
     cols = {row[1] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
     if "pw_version" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN pw_version INTEGER NOT NULL DEFAULT 0")
+    if "must_setup" not in cols:
+        conn.execute("ALTER TABLE users ADD COLUMN must_setup INTEGER NOT NULL DEFAULT 0")
 
 
 def init_db():
@@ -67,6 +69,7 @@ def init_db():
             password_hash TEXT NOT NULL,
             is_admin INTEGER NOT NULL DEFAULT 0,
             pw_version INTEGER NOT NULL DEFAULT 0,
+            must_setup INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE TABLE IF NOT EXISTS presets (
@@ -79,22 +82,14 @@ def init_db():
     """)
     _ensure_columns(conn)
 
-    admin_user = os.environ.get("ADMIN_USER", "admin")
-    admin_pass = os.environ.get("ADMIN_PASS")
-    if not admin_pass:
-        log.warning("[db] ADMIN_PASS not set, using default — change before production!")
-        admin_pass = "admin123"
-
-    row = conn.execute("SELECT id FROM users WHERE username = ?", (admin_user,)).fetchone()
-    if row:
-        conn.execute("UPDATE users SET password_hash = ?, is_admin = 1 WHERE id = ?",
-                      (hash_password(admin_pass), row["id"]))
-        log.info("[db] admin credentials updated")
-    else:
-        cur = conn.execute("INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, 1)",
-                           (admin_user, hash_password(admin_pass)))
+    # 检查是否已有管理员账户
+    has_admin = conn.execute("SELECT id FROM users WHERE is_admin = 1").fetchone()
+    if not has_admin:
+        cur = conn.execute(
+            "INSERT INTO users (username, password_hash, is_admin, must_setup) VALUES (?, ?, 1, 1)",
+            ("admin", hash_password("admin123")))
         create_default_presets(conn, cur.lastrowid)
-        log.info("[db] admin created with default presets")
+        log.info("[db] 默认管理员已创建 (admin / admin123)，首次登录须修改")
 
     conn.commit()
     conn.close()
