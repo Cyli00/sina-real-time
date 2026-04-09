@@ -87,28 +87,59 @@ npm install && npm run dev    # http://localhost:3000
 
 ```bash
 cd project
-cp .env.example .env
-# 编辑 .env: 设置 JWT_SECRET, ALLOWED_ORIGINS
-# 编辑 Caddyfile: 替换 your-domain.com 为实际域名
+
+# 创建 .env（仅需两个变量）
+echo "JWT_SECRET=$(openssl rand -hex 32)" > .env
+echo "ALLOWED_ORIGINS=https://your-domain.com" >> .env
 
 docker compose up -d
+# 首次登录默认管理员 admin / admin123，系统强制修改
 ```
 
-Caddy 自动签发 HTTPS 证书，前端静态文件由后端直接托管。
+后端监听 `127.0.0.1:4000`，需用服务器已有的 Caddy/nginx 反代：
+
+```caddyfile
+your-domain.com {
+    reverse_proxy 127.0.0.1:4000
+}
+```
 
 ### 裸机 Debian
 
 ```bash
 cd project
 sudo ./deploy.sh
-
-# 部署后必须修改:
-sudo vim /etc/backtest.env     # JWT_SECRET, 域名
-sudo vim /etc/caddy/Caddyfile  # 域名
+# 脚本自动生成 JWT_SECRET，部署后仅需修改域名:
+sudo vim /etc/caddy/Caddyfile  # 替换 your-domain.com
+sudo vim /etc/backtest.env     # ALLOWED_ORIGINS 改为实际域名
 sudo systemctl restart backtest caddy
+# 首次登录默认管理员 admin / admin123，系统强制修改
 ```
 
-服务管理:
+### 更新部署
+
+Docker Compose:
+
+```bash
+cd project
+git pull
+docker compose down
+docker compose up -d --build
+# 数据库在 ./data/ 目录，用户数据不受影响
+```
+
+裸机 Debian:
+
+```bash
+cd project
+git pull
+cd client && npm ci && npm run build   # 重新构建前端
+cd ../server-py && uv sync --no-dev    # 更新依赖
+sudo systemctl restart backtest
+```
+
+### 服务管理
+
 - `systemctl status backtest` — 后端状态
 - `systemctl status caddy` — 反代状态
 - 日志: `journalctl -u backtest -f`

@@ -179,6 +179,10 @@ function normalizeSymbol(input) {
     const code = pureDigit[1];
     if (code[0] === '6' || code[0] === '5') return 'sh' + code;
     if (code[0] === '8' || code[0] === '4') return 'bj' + code;
+    // 000xxx 上交所=指数 深交所=主板股票，优先识别为上交所指数
+    if (code.startsWith('000')) return 'sh' + code;
+    // 399xxx 深交所指数
+    if (code.startsWith('399')) return 'sz' + code;
     return 'sz' + code;
   }
   return s;
