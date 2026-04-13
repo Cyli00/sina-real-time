@@ -28,6 +28,9 @@ node_modules/
 .parcel-cache/
 .vite/
 
+# Frontend build output
+project/client/dist/
+
 # Python cache
 __pycache__/
 *.pyc

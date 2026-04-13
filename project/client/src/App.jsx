@@ -2,6 +2,22 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 /* ══════════════════════════════════════════
+   Responsive hook
+   ══════════════════════════════════════════ */
+
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < breakpoint);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener("change", handler);
+    setIsMobile(mq.matches);
+    return () => mq.removeEventListener("change", handler);
+  }, [breakpoint]);
+  return isMobile;
+}
+
+/* ══════════════════════════════════════════
    Auth helpers
    ══════════════════════════════════════════ */
 
@@ -226,7 +242,7 @@ function LoginScreen({ onLogin }) {
 
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <form onSubmit={submit} style={{width:340,background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:32}}>
+      <form onSubmit={submit} style={{width:"min(340px, 90vw)",background:"rgba(255,255,255,.03)",border:"1px solid rgba(255,255,255,.08)",borderRadius:12,padding:"clamp(20px,5vw,32px)"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:48,height:48,borderRadius:10,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,color:"#fff",marginBottom:12}}>量</div>
           <h2 style={{margin:0,fontSize:18,fontWeight:700,color:"#e8e6e3",letterSpacing:1}}>策略回测平台</h2>
@@ -282,7 +298,7 @@ function SetupScreen({ onComplete }) {
 
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <form onSubmit={submit} style={{width:380,background:"rgba(255,255,255,.03)",border:"1px solid rgba(99,102,241,.25)",borderRadius:12,padding:32}}>
+      <form onSubmit={submit} style={{width:"min(380px, 90vw)",background:"rgba(255,255,255,.03)",border:"1px solid rgba(99,102,241,.25)",borderRadius:12,padding:"clamp(20px,5vw,32px)"}}>
         <div style={{textAlign:"center",marginBottom:24}}>
           <div style={{width:48,height:48,borderRadius:10,background:"linear-gradient(135deg,#6366f1,#f97316)",display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:900,color:"#fff",marginBottom:12}}>设</div>
           <h2 style={{margin:0,fontSize:18,fontWeight:700,color:"#818cf8",letterSpacing:1}}>初始设置</h2>
@@ -318,6 +334,7 @@ function SetupScreen({ onComplete }) {
    ══════════════════════════════════════════ */
 
 function AdminPanel({ onBack }) {
+  const mob = useIsMobile();
   const [users, setUsers] = useState([]);
   const [newUser, setNewUser] = useState("");
   const [newPass, setNewPass] = useState("");
@@ -375,20 +392,20 @@ function AdminPanel({ onBack }) {
 
   return (
     <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",color:"#e8e6e3",fontFamily:"'JetBrains Mono','SF Mono','Fira Code',monospace"}}>
-      <div style={{background:"linear-gradient(90deg,rgba(99,102,241,.12),rgba(249,115,22,.08))",borderBottom:"1px solid rgba(99,102,241,.2)",padding:"20px 28px",display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:40,height:40,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#f97316)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#fff"}}>管</div>
-        <div>
-          <h1 style={{margin:0,fontSize:22,fontWeight:700,color:"#818cf8",letterSpacing:1}}>用户管理</h1>
-          <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>USER MANAGEMENT</p>
+      <div style={{background:"linear-gradient(90deg,rgba(99,102,241,.12),rgba(249,115,22,.08))",borderBottom:"1px solid rgba(99,102,241,.2)",padding:mob?"14px 16px":"20px 28px",display:"flex",alignItems:"center",gap:mob?10:14}}>
+        <div style={{width:mob?32:40,height:mob?32:40,borderRadius:8,background:"linear-gradient(135deg,#6366f1,#f97316)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?16:20,fontWeight:900,color:"#fff",flexShrink:0}}>管</div>
+        <div style={{minWidth:0}}>
+          <h1 style={{margin:0,fontSize:mob?16:22,fontWeight:700,color:"#818cf8",letterSpacing:1}}>用户管理</h1>
+          {!mob && <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>USER MANAGEMENT</p>}
         </div>
-        <button onClick={onBack} style={{marginLeft:"auto",fontSize:12,padding:"6px 16px",borderRadius:6,cursor:"pointer",background:"rgba(249,115,22,.15)",border:"1px solid rgba(249,115,22,.3)",color:"#fb923c"}}>返回回测</button>
+        <button onClick={onBack} style={{marginLeft:"auto",fontSize:mob?11:12,padding:mob?"5px 12px":"6px 16px",borderRadius:6,cursor:"pointer",background:"rgba(249,115,22,.15)",border:"1px solid rgba(249,115,22,.3)",color:"#fb923c",whiteSpace:"nowrap"}}>返回回测</button>
       </div>
 
-      <div style={{padding:"20px 28px",maxWidth:700}}>
+      <div style={{padding:mob?"14px 12px":"20px 28px",maxWidth:700}}>
         {/* 添加用户 */}
-        <div style={{...panelStyle,marginBottom:20}}>
+        <div style={{...panelStyle,marginBottom:20,padding:mob?14:18}}>
           <div style={{fontSize:11,color:"#6b7280",letterSpacing:2,marginBottom:12,textTransform:"uppercase"}}>添加用户 · Add User</div>
-          <form onSubmit={addUser} style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+          <form onSubmit={addUser} style={{display:"flex",flexDirection:mob?"column":"row",gap:10,alignItems:mob?"stretch":"flex-end"}}>
             <div style={{flex:1}}>
               <label style={{fontSize:10,color:"#6b7280",display:"block",marginBottom:4}}>用户名</label>
               <input value={newUser} onChange={e=>setNewUser(e.target.value)}
@@ -407,48 +424,86 @@ function AdminPanel({ onBack }) {
 
         {/* 用户列表 */}
         <div style={{...panelStyle,padding:0,overflow:"hidden"}}>
-          <div style={{padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+          <div style={{padding:mob?"12px 14px":"14px 18px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
             <span style={{fontSize:11,color:"#6b7280",letterSpacing:2,textTransform:"uppercase"}}>用户列表 · Users ({users.length})</span>
           </div>
-          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-            <thead><tr style={{borderBottom:"1px solid rgba(255,255,255,.08)"}}>
-              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>ID</th>
-              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>用户名</th>
-              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>角色</th>
-              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>创建时间</th>
-              <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>操作</th>
-            </tr></thead>
-            <tbody>{users.map(u => (
-              <tr key={u.id} style={{borderBottom:"1px solid rgba(255,255,255,.04)"}}>
-                <td style={{padding:"10px 14px",color:"#555"}}>{u.id}</td>
-                <td style={{padding:"10px 14px",color:"#e8e6e3",fontWeight:500}}>{u.username}</td>
-                <td style={{padding:"10px 14px"}}>{u.is_admin
-                  ? <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理员</span>
-                  : <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>普通用户</span>
-                }</td>
-                <td style={{padding:"10px 14px",color:"#6b7280",fontSize:11}}>{u.created_at}</td>
-                <td style={{padding:"10px 14px",display:"flex",gap:6,alignItems:"center"}}>
-                  {resetId===u.id ? (
-                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
-                      <input type="password" placeholder="新密码" value={resetPass} onChange={e=>setResetPass(e.target.value)}
-                        style={{width:100,padding:"4px 8px",fontSize:11,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:4,color:"#e8e6e3",outline:"none"}} />
-                      <button onClick={()=>resetPassword(u.id)} disabled={!resetPass.trim()}
-                        style={{fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.3)",color:"#22c55e"}}>确认</button>
-                      <button onClick={()=>{setResetId(null);setResetPass("");}}
-                        style={{fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>取消</button>
-                    </div>
-                  ) : (
-                    <>
-                      <button onClick={()=>{setResetId(u.id);setResetPass("");}}
-                        style={{fontSize:10,padding:"3px 10px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>重置密码</button>
-                      {!u.is_admin && <button onClick={()=>deleteUser(u.id,u.username)}
-                        style={{fontSize:10,padding:"3px 10px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>删除</button>}
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}</tbody>
-          </table>
+          {mob ? (
+            /* 手机端：卡片列表 */
+            <div style={{padding:8,display:"flex",flexDirection:"column",gap:8}}>
+              {users.map(u => (
+                <div key={u.id} style={{background:"rgba(0,0,0,.2)",borderRadius:8,padding:12,border:"1px solid rgba(255,255,255,.04)"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <span style={{fontSize:13,color:"#e8e6e3",fontWeight:600}}>{u.username}</span>
+                    {u.is_admin
+                      ? <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理员</span>
+                      : <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>用户</span>
+                    }
+                  </div>
+                  <div style={{fontSize:10,color:"#555",marginBottom:8}}>{u.created_at}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {resetId===u.id ? (
+                      <>
+                        <input type="password" placeholder="新密码" value={resetPass} onChange={e=>setResetPass(e.target.value)}
+                          style={{flex:1,minWidth:80,padding:"6px 8px",fontSize:12,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:4,color:"#e8e6e3",outline:"none",boxSizing:"border-box"}} />
+                        <button onClick={()=>resetPassword(u.id)} disabled={!resetPass.trim()}
+                          style={{fontSize:11,padding:"6px 12px",borderRadius:4,cursor:"pointer",background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.3)",color:"#22c55e"}}>确认</button>
+                        <button onClick={()=>{setResetId(null);setResetPass("");}}
+                          style={{fontSize:11,padding:"6px 12px",borderRadius:4,cursor:"pointer",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>取消</button>
+                      </>
+                    ) : (
+                      <>
+                        <button onClick={()=>{setResetId(u.id);setResetPass("");}}
+                          style={{fontSize:11,padding:"6px 12px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>重置密码</button>
+                        {!u.is_admin && <button onClick={()=>deleteUser(u.id,u.username)}
+                          style={{fontSize:11,padding:"6px 12px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>删除</button>}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            /* 桌面端：表格 */
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+              <thead><tr style={{borderBottom:"1px solid rgba(255,255,255,.08)"}}>
+                <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>ID</th>
+                <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>用户名</th>
+                <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>角色</th>
+                <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>创建时间</th>
+                <th style={{padding:"10px 14px",textAlign:"left",fontSize:10,color:"#6b7280",fontWeight:500,letterSpacing:1}}>操作</th>
+              </tr></thead>
+              <tbody>{users.map(u => (
+                <tr key={u.id} style={{borderBottom:"1px solid rgba(255,255,255,.04)"}}>
+                  <td style={{padding:"10px 14px",color:"#555"}}>{u.id}</td>
+                  <td style={{padding:"10px 14px",color:"#e8e6e3",fontWeight:500}}>{u.username}</td>
+                  <td style={{padding:"10px 14px"}}>{u.is_admin
+                    ? <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理员</span>
+                    : <span style={{fontSize:10,padding:"2px 8px",borderRadius:4,background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>普通用户</span>
+                  }</td>
+                  <td style={{padding:"10px 14px",color:"#6b7280",fontSize:11}}>{u.created_at}</td>
+                  <td style={{padding:"10px 14px",display:"flex",gap:6,alignItems:"center"}}>
+                    {resetId===u.id ? (
+                      <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                        <input type="password" placeholder="新密码" value={resetPass} onChange={e=>setResetPass(e.target.value)}
+                          style={{width:100,padding:"4px 8px",fontSize:11,background:"rgba(0,0,0,.3)",border:"1px solid rgba(255,255,255,.1)",borderRadius:4,color:"#e8e6e3",outline:"none"}} />
+                        <button onClick={()=>resetPassword(u.id)} disabled={!resetPass.trim()}
+                          style={{fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",background:"rgba(34,197,94,.1)",border:"1px solid rgba(34,197,94,.3)",color:"#22c55e"}}>确认</button>
+                        <button onClick={()=>{setResetId(null);setResetPass("");}}
+                          style={{fontSize:10,padding:"3px 8px",borderRadius:4,cursor:"pointer",background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",color:"#9ca3af"}}>取消</button>
+                      </div>
+                    ) : (
+                      <>
+                        <button onClick={()=>{setResetId(u.id);setResetPass("");}}
+                          style={{fontSize:10,padding:"3px 10px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>重置密码</button>
+                        {!u.is_admin && <button onClick={()=>deleteUser(u.id,u.username)}
+                          style={{fontSize:10,padding:"3px 10px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>删除</button>}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
@@ -493,6 +548,7 @@ export default function App() {
    ══════════════════════════════════════════ */
 
 function MainApp({ user, onLogout, onShowAdmin }) {
+  const mob = useIsMobile();
   const [showChangePwd, setShowChangePwd] = useState(false);
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
@@ -670,25 +726,25 @@ function MainApp({ user, onLogout, onShowAdmin }) {
     <div style={{minHeight:"100vh",background:"linear-gradient(145deg,#0a0a0f,#111118,#0d0d14)",color:"#e8e6e3",fontFamily:"'JetBrains Mono','SF Mono','Fira Code',monospace"}}>
 
       {/* ── HEADER ── */}
-      <div style={{background:"linear-gradient(90deg,rgba(249,115,22,.12),rgba(99,102,241,.08))",borderBottom:"1px solid rgba(249,115,22,.2)",padding:"14px 28px",display:"flex",alignItems:"center",gap:14}}>
-        <div style={{width:40,height:40,borderRadius:8,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#fff",flexShrink:0}}>量</div>
-        <div style={{flexShrink:0}}>
-          <h1 style={{margin:0,fontSize:22,fontWeight:700,letterSpacing:1,background:"linear-gradient(90deg,#f97316,#fb923c,#fbbf24)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>策略回测平台</h1>
-          <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>STRATEGY BACKTESTING</p>
+      <div style={{background:"linear-gradient(90deg,rgba(249,115,22,.12),rgba(99,102,241,.08))",borderBottom:"1px solid rgba(249,115,22,.2)",padding:mob?"10px 12px":"14px 28px",display:"flex",alignItems:"center",gap:mob?8:14,flexWrap:mob?"wrap":"nowrap"}}>
+        <div style={{width:mob?30:40,height:mob?30:40,borderRadius:8,background:"linear-gradient(135deg,#f97316,#6366f1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:mob?15:20,fontWeight:900,color:"#fff",flexShrink:0}}>量</div>
+        <div style={{flexShrink:0,minWidth:0}}>
+          <h1 style={{margin:0,fontSize:mob?15:22,fontWeight:700,letterSpacing:1,background:"linear-gradient(90deg,#f97316,#fb923c,#fbbf24)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>策略回测平台</h1>
+          {!mob && <p style={{margin:0,fontSize:11,color:"#6b7280",letterSpacing:2,marginTop:2}}>STRATEGY BACKTESTING</p>}
         </div>
-        <div style={{marginLeft:"auto",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
-          {dataSource && <span style={{fontSize:10,padding:"3px 10px",background:srcBadge.bg,color:srcBadge.c,borderRadius:4,border:`1px solid ${srcBadge.b}`}}>{srcBadge.t}</span>}
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{fontSize:11,color:"#6b7280"}}>{user?.username}</span>
-            <button onClick={()=>{setShowChangePwd(!showChangePwd);setPwdMsg("");setOldPwd("");setNewPwd("");}} style={{fontSize:10,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>改密</button>
-            {user?.is_admin && <button onClick={onShowAdmin} style={{fontSize:10,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理</button>}
-            <button onClick={onLogout} style={{fontSize:10,padding:"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>登出</button>
+        <div style={{marginLeft:"auto",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+          {dataSource && <span style={{fontSize:mob?9:10,padding:"3px 8px",background:srcBadge.bg,color:srcBadge.c,borderRadius:4,border:`1px solid ${srcBadge.b}`}}>{srcBadge.t}</span>}
+          <div style={{display:"flex",alignItems:"center",gap:mob?6:10}}>
+            <span style={{fontSize:mob?10:11,color:"#6b7280"}}>{user?.username}</span>
+            <button onClick={()=>{setShowChangePwd(!showChangePwd);setPwdMsg("");setOldPwd("");setNewPwd("");}} style={{fontSize:10,padding:mob?"3px 8px":"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(251,191,36,.1)",border:"1px solid rgba(251,191,36,.3)",color:"#fbbf24"}}>改密</button>
+            {user?.is_admin && <button onClick={onShowAdmin} style={{fontSize:10,padding:mob?"3px 8px":"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(99,102,241,.15)",border:"1px solid rgba(99,102,241,.3)",color:"#818cf8"}}>管理</button>}
+            <button onClick={onLogout} style={{fontSize:10,padding:mob?"3px 8px":"4px 10px",borderRadius:4,cursor:"pointer",background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",color:"#ef4444"}}>登出</button>
           </div>
         </div>
       </div>
       {showChangePwd && (
-        <div style={{background:"rgba(0,0,0,.4)",borderBottom:"1px solid rgba(251,191,36,.15)",padding:"12px 28px"}}>
-          <form onSubmit={changePassword} style={{display:"flex",gap:10,alignItems:"flex-end",maxWidth:500}}>
+        <div style={{background:"rgba(0,0,0,.4)",borderBottom:"1px solid rgba(251,191,36,.15)",padding:mob?"10px 12px":"12px 28px"}}>
+          <form onSubmit={changePassword} style={{display:"flex",flexDirection:mob?"column":"row",gap:10,alignItems:mob?"stretch":"flex-end",maxWidth:500}}>
             <div style={{flex:1}}>
               <label style={{fontSize:10,color:"#6b7280",display:"block",marginBottom:3}}>旧密码</label>
               <input type="password" value={oldPwd} onChange={e=>setOldPwd(e.target.value)}
@@ -706,12 +762,12 @@ function MainApp({ user, onLogout, onShowAdmin }) {
         </div>
       )}
 
-      <div style={{padding:"20px 28px"}}>
-        {/* ── CONTROLS: 2-column ── */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+      <div style={{padding:mob?"12px":"20px 28px"}}>
+        {/* ── CONTROLS ── */}
+        <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:mob?12:16,marginBottom:mob?12:20}}>
 
           {/* LEFT: Symbol + Capital + Date Range */}
-          <div style={{...panelStyle}}>
+          <div style={{...panelStyle,padding:mob?12:18}}>
             <SectionLabel>标的选择 · Symbol</SectionLabel>
             <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
               {presets.map(p=>(
@@ -721,19 +777,20 @@ function MainApp({ user, onLogout, onShowAdmin }) {
                 </div>
               ))}
             </div>
-            <div style={{display:"flex",gap:10,marginBottom:14}}>
-              <div style={{flex:1}}>
+            {/* 自定义代码 + 资金 */}
+            <div style={{display:"flex",flexWrap:"wrap",gap:10,marginBottom:14}}>
+              <div style={{flex:"1 1 180px",minWidth:0}}>
                 <MiniLabel>自定义代码</MiniLabel>
                 <div style={{display:"flex",gap:6}}>
                   <Input value={custom} onChange={e=>setCustom(e.target.value)} placeholder="sh600036, sz000002" style={{flex:1}} />
-                  <button onClick={addPreset} disabled={!custom.trim()} style={{padding:"0 12px",fontSize:11,borderRadius:6,cursor:custom.trim()?"pointer":"default",background:custom.trim()?"rgba(34,197,94,.15)":"rgba(255,255,255,.03)",border:"1px solid "+(custom.trim()?"rgba(34,197,94,.4)":"rgba(255,255,255,.06)"),color:custom.trim()?"#22c55e":"#555",whiteSpace:"nowrap"}}>+ 收藏</button>
+                  <button onClick={addPreset} disabled={!custom.trim()} style={{padding:"0 12px",fontSize:11,borderRadius:6,cursor:custom.trim()?"pointer":"default",background:custom.trim()?"rgba(34,197,94,.15)":"rgba(255,255,255,.03)",border:"1px solid "+(custom.trim()?"rgba(34,197,94,.4)":"rgba(255,255,255,.06)"),color:custom.trim()?"#22c55e":"#555",whiteSpace:"nowrap",flexShrink:0}}>+ 收藏</button>
                 </div>
               </div>
-              <div style={{width:120}}>
+              <div style={{flex:"0 0 auto",width:mob?'calc(50% - 5px)':120}}>
                 <MiniLabel>初始资金(万)</MiniLabel>
                 <Input type="number" value={capital} onChange={e=>setCapital(+e.target.value)} style={{color:"#fbbf24",fontWeight:600}} />
               </div>
-              <div style={{width:150}}>
+              <div style={{flex:"0 0 auto",width:mob?'calc(50% - 5px)':150}}>
                 <MiniLabel>成交价格</MiniLabel>
                 <div style={{display:"flex",borderRadius:6,overflow:"hidden",border:"1px solid rgba(255,255,255,.1)",height:35}}>
                   {[["close","当日收盘"],["nextOpen","次日开盘"]].map(([v,label])=>(
@@ -741,19 +798,19 @@ function MainApp({ user, onLogout, onShowAdmin }) {
                   ))}
                 </div>
               </div>
-              <div style={{width:90}}>
+              <div style={{flex:"0 0 auto",width:mob?'calc(50% - 5px)':90}}>
                 <MiniLabel>佣金(万分)</MiniLabel>
                 <Input type="number" value={commission} onChange={e=>setCommission(+e.target.value)} style={{color:"#9ca3af"}} />
               </div>
-              <div style={{width:90}}>
+              <div style={{flex:"0 0 auto",width:mob?'calc(50% - 5px)':90}}>
                 <MiniLabel>印花税(万分)</MiniLabel>
                 <Input type="number" value={stampTax} onChange={e=>setStampTax(+e.target.value)} style={{color:"#9ca3af"}} />
               </div>
-              <div style={{width:90}}>
+              <div style={{flex:"0 0 auto",width:mob?'calc(50% - 5px)':90}}>
                 <MiniLabel>最低佣金(元)</MiniLabel>
                 <Input type="number" value={minComm} onChange={e=>setMinComm(+e.target.value)} style={{color:"#9ca3af"}} />
               </div>
-              <div style={{width:80}}>
+              <div style={{flex:"0 0 auto",width:mob?'calc(50% - 5px)':80}}>
                 <MiniLabel>滑点(万分)</MiniLabel>
                 <Input type="number" value={slippage} onChange={e=>setSlippage(+e.target.value)} style={{color:"#9ca3af"}} />
               </div>
@@ -791,7 +848,7 @@ function MainApp({ user, onLogout, onShowAdmin }) {
           </div>
 
           {/* RIGHT: Strategy selection */}
-          <div style={{...panelStyle}}>
+          <div style={{...panelStyle,padding:mob?12:18}}>
             <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
               <SectionLabel style={{marginBottom:0}}>策略选择 · Strategies</SectionLabel>
               <button onClick={()=>setSelStrats(Object.keys(STRATS))} style={smallBtn("#6366f1")}>全选</button>
@@ -812,24 +869,24 @@ function MainApp({ user, onLogout, onShowAdmin }) {
         </div>
 
         {/* ── RUN BUTTON ── */}
-        <button onClick={run} disabled={loading||!selStrats.length} style={{width:"100%",padding:12,fontSize:14,fontWeight:700,borderRadius:8,cursor:loading?"wait":"pointer",background:loading?"rgba(255,255,255,.05)":"linear-gradient(90deg,#f97316,#fb923c)",border:"none",color:loading?"#6b7280":"#0a0a0f",letterSpacing:2,marginBottom:20,opacity:selStrats.length?1:.4}}>
-          {loading ? "⏳ 回测中..." : `▶ 开始回测 · ${stockName} · ${startDate} → ${endDate}`}
+        <button onClick={run} disabled={loading||!selStrats.length} style={{width:"100%",padding:mob?10:12,fontSize:mob?12:14,fontWeight:700,borderRadius:8,cursor:loading?"wait":"pointer",background:loading?"rgba(255,255,255,.05)":"linear-gradient(90deg,#f97316,#fb923c)",border:"none",color:loading?"#6b7280":"#0a0a0f",letterSpacing:mob?1:2,marginBottom:mob?12:20,opacity:selStrats.length?1:.4}}>
+          {loading ? "⏳ 回测中..." : mob ? `▶ 开始回测 · ${stockName}` : `▶ 开始回测 · ${stockName} · ${startDate} → ${endDate}`}
         </button>
 
         {/* ── CHART ── */}
         {chartData.length>0 && (
-          <div style={{...panelStyle,padding:"20px 16px 10px",marginBottom:20}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,padding:"0 8px"}}>
+          <div style={{...panelStyle,padding:mob?"12px 6px 6px":"20px 16px 10px",marginBottom:mob?12:20}}>
+            <div style={{display:"flex",flexDirection:mob?"column":"row",justifyContent:"space-between",alignItems:mob?"flex-start":"center",marginBottom:mob?8:14,padding:"0 8px",gap:mob?2:0}}>
               <div>
-                <span style={{fontSize:15,fontWeight:700,color:"#f97316"}}>{stockName}</span>
-                <span style={{fontSize:11,color:"#6b7280",marginLeft:10}}>{activeSymbol} · 资金曲线 (万元)</span>
+                <span style={{fontSize:mob?13:15,fontWeight:700,color:"#f97316"}}>{stockName}</span>
+                <span style={{fontSize:mob?10:11,color:"#6b7280",marginLeft:8}}>{activeSymbol} · 资金曲线</span>
               </div>
-              <span style={{fontSize:10,color:"#4b5563"}}>{rawData&&`${rawData[0]?.day} → ${rawData[rawData.length-1]?.day} · ${rawData.length} 交易日`}</span>
+              <span style={{fontSize:mob?9:10,color:"#4b5563"}}>{rawData&&`${rawData[0]?.day} → ${rawData[rawData.length-1]?.day} · ${rawData.length}日`}</span>
             </div>
-            <ResponsiveContainer width="100%" height={420}>
-              <LineChart data={chartData} margin={{top:5,right:20,left:10,bottom:5}}>
-                <XAxis dataKey="date" fontSize={9} stroke="#333" tick={{fill:"#555"}} tickFormatter={v=>v.slice(2,7)} interval={Math.floor(chartData.length/12)}/>
-                <YAxis fontSize={9} stroke="#333" tick={{fill:"#555"}} tickFormatter={v=>`${v}万`} domain={["auto","auto"]}/>
+            <ResponsiveContainer width="100%" height={mob?260:420}>
+              <LineChart data={chartData} margin={mob?{top:5,right:8,left:-10,bottom:5}:{top:5,right:20,left:10,bottom:5}}>
+                <XAxis dataKey="date" fontSize={mob?8:9} stroke="#333" tick={{fill:"#555"}} tickFormatter={v=>v.slice(2,7)} interval={Math.floor(chartData.length/(mob?6:12))}/>
+                <YAxis fontSize={mob?8:9} stroke="#333" tick={{fill:"#555"}} tickFormatter={v=>`${v}`} domain={["auto","auto"]} width={mob?35:60}/>
                 <Tooltip contentStyle={{background:"rgba(10,10,15,.95)",border:"1px solid rgba(255,255,255,.1)",borderRadius:8,fontSize:11,color:"#e8e6e3"}} labelStyle={{color:"#6b7280",marginBottom:4}} formatter={(v,n)=>[`${fmt(v)}万`,STRATS[n]?.name||n]} itemSorter={(a)=>-a.value}/>
                 <ReferenceLine y={capital} stroke="#444" strokeDasharray="4 4"/>
                 {selStrats.map(k=>results[k]&&<Line key={k} type="monotone" dataKey={k} stroke={STRATS[k].color} strokeWidth={k==="ma20"?2.5:1.5} dot={false} isAnimationActive={false}/>)}
@@ -840,36 +897,62 @@ function MainApp({ user, onLogout, onShowAdmin }) {
 
         {/* ── RESULTS TABLE ── */}
         {sorted.length>0 && (
-          <div style={{...panelStyle,padding:0,overflow:"hidden",marginBottom:20}}>
-            <div style={{padding:"14px 18px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
-              <span style={{fontSize:12,fontWeight:600,color:"#9ca3af",letterSpacing:1}}>📊 回测排名 PERFORMANCE RANKING</span>
+          <div style={{...panelStyle,padding:0,overflow:"hidden",marginBottom:mob?12:20}}>
+            <div style={{padding:mob?"10px 12px":"14px 18px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+              <span style={{fontSize:mob?11:12,fontWeight:600,color:"#9ca3af",letterSpacing:1}}>📊 回测排名</span>
             </div>
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
-                <thead><tr style={{borderBottom:"1px solid rgba(255,255,255,.08)"}}>
-                  <TH>#</TH><TH>策略</TH>
-                  <TH sort onClick={()=>handleSort("finalValue")}>最终资产(万) {sortCol==="finalValue"?(sortAsc?"↑":"↓"):""}</TH>
-                  <TH sort onClick={()=>handleSort("totalReturn")}>总收益率 {sortCol==="totalReturn"?(sortAsc?"↑":"↓"):""}</TH>
-                  <TH sort onClick={()=>handleSort("maxDrawdown")}>最大回撤 {sortCol==="maxDrawdown"?(sortAsc?"↑":"↓"):""}</TH>
-                  <TH sort onClick={()=>handleSort("trades")}>交易次数 {sortCol==="trades"?(sortAsc?"↑":"↓"):""}</TH>
-                  <TH sort onClick={()=>handleSort("winRate")}>胜率 {sortCol==="winRate"?(sortAsc?"↑":"↓"):""}</TH>
-                </tr></thead>
-                <tbody>{sorted.map((r,i)=>{
+            {mob ? (
+              /* 手机端：卡片排名 */
+              <div style={{padding:8,display:"flex",flexDirection:"column",gap:6}}>
+                {sorted.map((r,i)=>{
                   const st=STRATS[r.key],ret=+r.totalReturn;
                   return(
-                    <tr key={r.key} style={{borderBottom:"1px solid rgba(255,255,255,.04)",background:i===0?"rgba(249,115,22,.06)":"transparent"}}>
-                      <TD style={{color:i===0?"#f97316":"#555",fontWeight:700}}>{i+1}</TD>
-                      <TD><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:st.color,marginRight:8,verticalAlign:"middle"}}/><span style={{color:st.color,fontWeight:500}}>{st.name}</span></TD>
-                      <TD style={{color:"#fbbf24",fontWeight:700}}>{fmt(r.finalValue)}</TD>
-                      <TD style={{fontWeight:700,color:ret>0?"#22c55e":ret<0?"#ef4444":"#6b7280"}}>{ret>0?"+":""}{r.totalReturn}%</TD>
-                      <TD style={{color:"#ef4444"}}>-{r.maxDrawdown}%</TD>
-                      <TD style={{color:"#9ca3af"}}>{r.trades}</TD>
-                      <TD style={{color:+r.winRate>50?"#22c55e":"#f97316"}}>{r.winRate}%</TD>
-                    </tr>
+                    <div key={r.key} style={{background:i===0?"rgba(249,115,22,.08)":"rgba(0,0,0,.2)",borderRadius:8,padding:"10px 12px",border:i===0?"1px solid rgba(249,115,22,.15)":"1px solid rgba(255,255,255,.04)"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <span style={{fontSize:14,fontWeight:800,color:i===0?"#f97316":"#555",width:20}}>{i+1}</span>
+                        <span style={{width:8,height:8,borderRadius:"50%",background:st.color,flexShrink:0}}/>
+                        <span style={{color:st.color,fontWeight:600,fontSize:13}}>{st.name}</span>
+                        <span style={{marginLeft:"auto",color:"#fbbf24",fontWeight:700,fontSize:13}}>{fmt(r.finalValue)}万</span>
+                      </div>
+                      <div style={{display:"flex",gap:12,fontSize:11,paddingLeft:28}}>
+                        <span style={{color:ret>0?"#22c55e":ret<0?"#ef4444":"#6b7280"}}>{ret>0?"+":""}{r.totalReturn}%</span>
+                        <span style={{color:"#ef4444"}}>回撤-{r.maxDrawdown}%</span>
+                        <span style={{color:"#9ca3af"}}>{r.trades}笔</span>
+                        <span style={{color:+r.winRate>50?"#22c55e":"#f97316"}}>胜{r.winRate}%</span>
+                      </div>
+                    </div>
                   );
-                })}</tbody>
-              </table>
-            </div>
+                })}
+              </div>
+            ) : (
+              /* 桌面端：表格 */
+              <div style={{overflowX:"auto"}}>
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                  <thead><tr style={{borderBottom:"1px solid rgba(255,255,255,.08)"}}>
+                    <TH>#</TH><TH>策略</TH>
+                    <TH sort onClick={()=>handleSort("finalValue")}>最终资产(万) {sortCol==="finalValue"?(sortAsc?"↑":"↓"):""}</TH>
+                    <TH sort onClick={()=>handleSort("totalReturn")}>总收益率 {sortCol==="totalReturn"?(sortAsc?"↑":"↓"):""}</TH>
+                    <TH sort onClick={()=>handleSort("maxDrawdown")}>最大回撤 {sortCol==="maxDrawdown"?(sortAsc?"↑":"↓"):""}</TH>
+                    <TH sort onClick={()=>handleSort("trades")}>交易次数 {sortCol==="trades"?(sortAsc?"↑":"↓"):""}</TH>
+                    <TH sort onClick={()=>handleSort("winRate")}>胜率 {sortCol==="winRate"?(sortAsc?"↑":"↓"):""}</TH>
+                  </tr></thead>
+                  <tbody>{sorted.map((r,i)=>{
+                    const st=STRATS[r.key],ret=+r.totalReturn;
+                    return(
+                      <tr key={r.key} style={{borderBottom:"1px solid rgba(255,255,255,.04)",background:i===0?"rgba(249,115,22,.06)":"transparent"}}>
+                        <TD style={{color:i===0?"#f97316":"#555",fontWeight:700}}>{i+1}</TD>
+                        <TD><span style={{display:"inline-block",width:8,height:8,borderRadius:"50%",background:st.color,marginRight:8,verticalAlign:"middle"}}/><span style={{color:st.color,fontWeight:500}}>{st.name}</span></TD>
+                        <TD style={{color:"#fbbf24",fontWeight:700}}>{fmt(r.finalValue)}</TD>
+                        <TD style={{fontWeight:700,color:ret>0?"#22c55e":ret<0?"#ef4444":"#6b7280"}}>{ret>0?"+":""}{r.totalReturn}%</TD>
+                        <TD style={{color:"#ef4444"}}>-{r.maxDrawdown}%</TD>
+                        <TD style={{color:"#9ca3af"}}>{r.trades}</TD>
+                        <TD style={{color:+r.winRate>50?"#22c55e":"#f97316"}}>{r.winRate}%</TD>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 

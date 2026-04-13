@@ -58,6 +58,11 @@ def _ensure_columns(conn: sqlite3.Connection):
         conn.execute("ALTER TABLE users ADD COLUMN pw_version INTEGER NOT NULL DEFAULT 0")
     if "must_setup" not in cols:
         conn.execute("ALTER TABLE users ADD COLUMN must_setup INTEGER NOT NULL DEFAULT 0")
+        # 旧库升级：默认密码未改的管理员需要强制设置
+        for row in conn.execute("SELECT id, password_hash FROM users WHERE is_admin = 1"):
+            if verify_password("admin123", row["password_hash"]):
+                conn.execute("UPDATE users SET must_setup = 1 WHERE id = ?", (row["id"],))
+                log.info("[db] admin id=%d flagged for mandatory setup", row["id"])
 
 
 def init_db():
@@ -89,7 +94,13 @@ def init_db():
             "INSERT INTO users (username, password_hash, is_admin, must_setup) VALUES (?, ?, 1, 1)",
             ("admin", hash_password("admin123")))
         create_default_presets(conn, cur.lastrowid)
-        log.info("[db] 默认管理员已创建 (admin / admin123)，首次登录须修改")
+        log.info("[db] default admin created (admin / admin123), must change on first login")
+    else:
+        # 每次启动检测：仍用默认密码的管理员强制设置
+        for row in conn.execute("SELECT id, password_hash, must_setup FROM users WHERE is_admin = 1 AND must_setup = 0"):
+            if verify_password("admin123", row["password_hash"]):
+                conn.execute("UPDATE users SET must_setup = 1 WHERE id = ?", (row["id"],))
+                log.info("[db] admin id=%d still uses default password, flagged for setup", row["id"])
 
     conn.commit()
     conn.close()

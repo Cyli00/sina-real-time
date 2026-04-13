@@ -1,8 +1,8 @@
 # Start backend (Python) + frontend, visit http://localhost:3000
 $root = $PSScriptRoot
 
-# 默认管理员: admin / admin123（首次登录强制修改）
-Write-Host "== 默认管理员: admin / admin123 (首次登录须修改) ==" -ForegroundColor Magenta
+# Default admin: admin / admin123 (must change on first login)
+Write-Host "== Default admin: admin / admin123 (change on first login) ==" -ForegroundColor Magenta
 
 # Kill previous backend if port 4000 is occupied
 $existing = Get-NetTCPConnection -LocalPort 4000 -State Listen -ErrorAction SilentlyContinue
