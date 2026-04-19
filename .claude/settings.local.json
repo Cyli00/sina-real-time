@@ -11,7 +11,14 @@
       "Bash(git -C e:/gitProjects/sina-real-time rm project/server-py/presets.json)",
       "Bash(npx --yes vite build)",
       "Bash(git check-ignore:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(cp webfetch-1776602960942-o57vcw.bin design.gz)",
+      "Bash(gunzip -f design.gz)",
+      "Bash(mkdir -p /tmp/design-bundle)",
+      "Read(//tmp/**)",
+      "Bash(tar xf *)",
+      "Bash(git update-index *)"
     ]
   }
 }

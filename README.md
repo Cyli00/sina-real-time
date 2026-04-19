@@ -118,25 +118,16 @@ sudo systemctl restart backtest caddy
 
 ### 更新部署
 
-Docker Compose:
-
 ```bash
 cd project
-git pull
 docker compose down
-docker compose up -d --build
-# 数据库在 ./data/ 目录，用户数据不受影响
-```
-
-裸机 Debian:
-
-```bash
-cd project
 git pull
-cd client && npm ci && npm run build   # 重新构建前端
-cd ../server-py && uv sync --no-dev    # 更新依赖
-sudo systemctl restart backtest
+docker compose up -d --build
 ```
+
+数据库在 `./data/` 目录（已加入 `.gitignore`），`git pull` 不会影响用户数据。
+
+旧版升级（数据库在 `server-py/` 下）需先迁移：`./upgrade.sh`
 
 ### 服务管理
 
@@ -154,7 +145,7 @@ Internet → Caddy (:443 HTTPS) → FastAPI (:4000 localhost)
 
 - 后端绑定 `127.0.0.1:4000`，仅本机可访问
 - Caddy 反代对外暴露，自动 HTTPS
-- SQLite 数据库持久化（Docker 用 volume，裸机在 `/opt/backtest/data/`）
+- SQLite 数据库持久化在 `./data/`（`.gitignore` 忽略，`git pull` 不影响）
 
 ## 环境变量
 

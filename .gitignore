@@ -39,6 +39,7 @@ __pycache__/
 
 # SQLite database
 *.db
+/data/
 
 # Environment secrets
 .env
