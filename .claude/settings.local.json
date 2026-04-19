@@ -9,7 +9,9 @@
       "Bash(e:/gitProjects/sina-real-time/project/server-py/.venv/Scripts/python.exe -c \"import akshare as ak; funcs = [f for f in dir\\(ak\\) if 'etf' in f and 'hist' in f]; print\\('\\\\n'.join\\(funcs\\)\\)\")",
       "Bash(e:/gitProjects/sina-real-time/project/server-py/.venv/Scripts/python.exe -c ':*)",
       "Bash(git -C e:/gitProjects/sina-real-time rm project/server-py/presets.json)",
-      "Bash(npx --yes vite build)"
+      "Bash(npx --yes vite build)",
+      "Bash(git check-ignore:*)",
+      "Bash(git restore:*)"
     ]
   }
 }
